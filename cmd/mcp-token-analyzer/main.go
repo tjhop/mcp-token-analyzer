@@ -76,6 +76,8 @@ func run(ctx context.Context) error {
 	}
 
 	toolStats := make([]analyzer.ToolTokens, 0, len(tools))
+	totalStats := analyzer.ToolTokens{Name: "TOTAL"}
+
 	for _, tool := range tools {
 		stats, err := counter.AnalyzeTool(tool)
 		if err != nil {
@@ -83,6 +85,10 @@ func run(ctx context.Context) error {
 			continue
 		}
 		toolStats = append(toolStats, stats)
+		totalStats.NameTokens += stats.NameTokens
+		totalStats.DescTokens += stats.DescTokens
+		totalStats.SchemaTokens += stats.SchemaTokens
+		totalStats.TotalTokens += stats.TotalTokens
 	}
 
 	sort.Slice(toolStats, func(i, j int) bool {
@@ -100,6 +106,13 @@ func run(ctx context.Context) error {
 			strconv.Itoa(stats.TotalTokens),
 		)
 	}
+	t.AddFooters(
+		totalStats.Name,
+		strconv.Itoa(totalStats.NameTokens),
+		strconv.Itoa(totalStats.DescTokens),
+		strconv.Itoa(totalStats.SchemaTokens),
+		strconv.Itoa(totalStats.TotalTokens),
+	)
 
 	t.Render()
 	return nil
