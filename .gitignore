@@ -1,0 +1,8 @@
+*.log
+*.vim
+*.swp
+.vagrant/
+.golangci-lint/
+
+dist/
+/mcp-token-analyzer

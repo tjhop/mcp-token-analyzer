@@ -1,0 +1,80 @@
+version: 2
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -X github.com/tjhop/mcp-token-analyzer/internal/version.BuildDate={{ .CommitDate }}
+      - -X github.com/tjhop/mcp-token-analyzer/internal/version.Version={{ .Version }}
+      - -X github.com/tjhop/mcp-token-analyzer/internal/version.Commit={{ .Commit }}
+    binary: mcp-token-analyzer
+    main: './cmd/mcp-token-analyzer'
+gomod:
+  proxy: false
+dockers_v2:
+  - images:
+      - "ghcr.io/tjhop/{{.ProjectName}}"
+    tags:
+      - "{{.Version}}"
+      - "v{{.Version}}"
+      - "latest"
+    labels:
+      "org.opencontainers.image.description": "MCP Token Analyzer"
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.name": "{{.ProjectName}}"
+      "org.opencontainers.image.title": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
+      "org.opencontainers.image.licenses": "Apache-2.0"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+nfpms:
+  - package_name: 'mcp-token-analyzer'
+    homepage: 'https://github.com/tjhop/mcp-token-analyzer'
+    maintainer: 'TJ Hoplock <t.hoplock@gmail.com>'
+    description: 'MCP Token Analyzer CLI'
+    formats:
+      - deb
+      - rpm
+      - archlinux
+    bindir: /usr/bin
+    contents:
+      - src: ./README.md
+        dst: /usr/share/doc/tjhop/mcp-token-analyzer/README.md
+universal_binaries:
+  - replace: true
+archives:
+  - files:
+    - LICENSE*
+    - README*
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^Merge pull request'
+      - '^ci(?:\(\w+\))?\!?:'
+      - '^docs(?:\(\w+\))?\!?:'
+      - '^test(?:\(\w+\))?\!?:'
+      - '^style(?:\(\w+\))?\!?:'
+  groups:
+    - title: "New Features And Changes"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Other Changes"
+      order: 999
