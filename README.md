@@ -3,6 +3,8 @@
 [![license](https://img.shields.io/github/license/tjhop/mcp-token-analyzer)](https://github.com/tjhop/mcp-token-analyzer/blob/master/LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/tjhop/mcp-token-analyzer)](https://goreportcard.com/report/github.com/tjhop/mcp-token-analyzer)
 [![golangci-lint](https://github.com/tjhop/mcp-token-analyzer/actions/workflows/golangci-lint.yaml/badge.svg)](https://github.com/tjhop/mcp-token-analyzer/actions/workflows/golangci-lint.yaml)
+[![Latest Release](https://img.shields.io/github/v/release/tjhop/mcp-token-analyzer)](https://github.com/tjhop/mcp-token-analyzer/releases/latest)
+[![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/tjhop/mcp-token-analyzer/total)](https://github.com/tjhop/mcp-token-analyzer/releases/latest)
 
 ## About
 `mcp-token-analyzer` is a CLI tool designed to connect to a Model Context Protocol (MCP) server, retrieve its tool definitions and schema, and analyze the token usage of each tool.
