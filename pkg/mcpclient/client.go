@@ -14,7 +14,7 @@ import (
 )
 
 type Client struct {
-	session *mcp.ClientSession
+	*mcp.ClientSession
 }
 
 func NewMCPClient() *mcp.Client {
@@ -44,7 +44,7 @@ func NewStdioClient(ctx context.Context, command string) (*Client, error) {
 		return nil, fmt.Errorf("failed to connect MCP client and establish session: %w", err)
 	}
 
-	return &Client{session: session}, nil
+	return &Client{session}, nil
 }
 
 // TODO (@tjhop): allow configuring HTTP client attributes and auth things like basic auth, tls etc?
@@ -60,17 +60,9 @@ func NewHTTPClient(ctx context.Context, url string) (*Client, error) {
 		return nil, fmt.Errorf("failed to connect MCP client and establish session: %w", err)
 	}
 
-	return &Client{session: session}, nil
-}
-
-func (c *Client) ListTools(ctx context.Context) ([]*mcp.Tool, error) {
-	resp, err := c.session.ListTools(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list tools: %w", err)
-	}
-	return resp.Tools, nil
+	return &Client{session}, nil
 }
 
 func (c *Client) Close() error {
-	return c.session.Close()
+	return c.ClientSession.Close()
 }
