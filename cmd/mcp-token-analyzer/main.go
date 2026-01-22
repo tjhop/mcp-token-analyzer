@@ -61,19 +61,34 @@ func run(ctx context.Context) error {
 	}
 
 	if err != nil {
-		return fmt.Errorf("creating client: %w", err)
+		return fmt.Errorf("error creating client: %w", err)
 	}
 	defer client.Close()
 
-	tools, err := client.ListTools(ctx)
-	if err != nil {
-		return fmt.Errorf("listing tools: %w", err)
-	}
-
 	counter, err := analyzer.NewTokenCounter(*flagTokenizerModel)
 	if err != nil {
-		return fmt.Errorf("creating counter: %w", err)
+		return fmt.Errorf("error creating counter: %w", err)
 	}
+
+	initResp := client.InitializeResult()
+	instrx := initResp.Instructions
+
+	initName := "<unset>"
+	if initResp.ServerInfo != nil {
+		initName = initResp.ServerInfo.Name
+	}
+
+	fmt.Println("MCP Server Instructions Analysis")
+	instrxTable := table.New(os.Stdout)
+	instrxTable.SetHeaders("MCP Server Name", "Instructions tokens")
+	instrxTable.AddRow(initName, strconv.Itoa(len(counter.Encode(instrx, nil, nil))))
+	instrxTable.Render()
+
+	toolsResp, err := client.ListTools(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("error listing tools: %w", err)
+	}
+	tools := toolsResp.Tools
 
 	toolStats := make([]analyzer.ToolTokens, 0, len(tools))
 	totalStats := analyzer.ToolTokens{Name: "TOTAL"}
@@ -95,10 +110,11 @@ func run(ctx context.Context) error {
 		return toolStats[i].TotalTokens > toolStats[j].TotalTokens
 	})
 
-	t := table.New(os.Stdout)
-	t.SetHeaders("Tool Name", "Name Tokens", "Desc Tokens", "Schema Tokens", "Total Tokens")
+	fmt.Println("MCP Tool Analysis")
+	toolTable := table.New(os.Stdout)
+	toolTable.SetHeaders("Tool Name", "Name Tokens", "Desc Tokens", "Schema Tokens", "Total Tokens")
 	for _, stats := range toolStats {
-		t.AddRow(
+		toolTable.AddRow(
 			stats.Name,
 			strconv.Itoa(stats.NameTokens),
 			strconv.Itoa(stats.DescTokens),
@@ -106,14 +122,14 @@ func run(ctx context.Context) error {
 			strconv.Itoa(stats.TotalTokens),
 		)
 	}
-	t.AddFooters(
+	toolTable.AddFooters(
 		totalStats.Name,
 		strconv.Itoa(totalStats.NameTokens),
 		strconv.Itoa(totalStats.DescTokens),
 		strconv.Itoa(totalStats.SchemaTokens),
 		strconv.Itoa(totalStats.TotalTokens),
 	)
+	toolTable.Render()
 
-	t.Render()
 	return nil
 }

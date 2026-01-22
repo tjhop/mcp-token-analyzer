@@ -17,7 +17,7 @@ type ToolTokens struct {
 }
 
 type TokenCounter struct {
-	tkm *tiktoken.Tiktoken
+	*tiktoken.Tiktoken
 }
 
 func NewTokenCounter(model string) (*TokenCounter, error) {
@@ -28,7 +28,7 @@ func NewTokenCounter(model string) (*TokenCounter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get encoding: %w", err)
 	}
-	return &TokenCounter{tkm: tkm}, nil
+	return &TokenCounter{tkm}, nil
 }
 
 func (c *TokenCounter) AnalyzeTool(tool *mcp.Tool) (ToolTokens, error) {
@@ -38,9 +38,9 @@ func (c *TokenCounter) AnalyzeTool(tool *mcp.Tool) (ToolTokens, error) {
 	}
 	schemaStr := string(schemaBytes)
 
-	nameTokens := len(c.tkm.Encode(tool.Name, nil, nil))
-	descTokens := len(c.tkm.Encode(tool.Description, nil, nil))
-	schemaTokens := len(c.tkm.Encode(schemaStr, nil, nil))
+	nameTokens := len(c.Encode(tool.Name, nil, nil))
+	descTokens := len(c.Encode(tool.Description, nil, nil))
+	schemaTokens := len(c.Encode(schemaStr, nil, nil))
 
 	return ToolTokens{
 		Name:         tool.Name,
