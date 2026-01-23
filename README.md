@@ -21,6 +21,7 @@ MCP Server Instructions Analysis
 ├───────────────────────┼─────────────────────┤
 │ prometheus-mcp-server │ 4527                │
 └───────────────────────┴─────────────────────┘
+
 MCP Tool Analysis
 ┌───────────────────┬─────────────┬─────────────┬───────────────┬──────────────┐
 │     Tool Name     │ Name Tokens │ Desc Tokens │ Schema Tokens │ Total Tokens │
@@ -83,12 +84,61 @@ MCP Tool Analysis
 ├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
 │       TOTAL       │     56      │     301     │     1309      │     1666     │
 └───────────────────┴─────────────┴─────────────┴───────────────┴──────────────┘
+
+MCP Prompt Analysis
+┌─────────────┬─────────────┬─────────────┬─────────────┬──────────────┐
+│ Prompt Name │ Name Tokens │ Desc Tokens │ Args Tokens │ Total Tokens │
+├─────────────┼─────────────┼─────────────┼─────────────┼──────────────┤
+│    TOTAL    │      0      │      0      │      0      │      0       │
+└─────────────┴─────────────┴─────────────┴─────────────┴──────────────┘
+
+MCP Resource Analysis
+┌─────────────────────────────────────────────────┬─────────────┬────────────┬─────────────┬──────────────┐
+│                  Resource Name                  │ Name Tokens │ URI Tokens │ Desc Tokens │ Total Tokens │
+├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
+│ List of Official Prometheus Documentation Files │ 6           │ 4          │ 15          │ 25           │
+├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
+│ Official Prometheus Documentation               │ 3           │ 7          │ 15          │ 25           │
+├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
+│ TSDB Stats                                      │ 3           │ 6          │ 9           │ 18           │
+├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
+│ Targets                                         │ 1           │ 4          │ 10          │ 15           │
+├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
+│ List metrics                                    │ 2           │ 5          │ 3           │ 10           │
+├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
+│                      TOTAL                      │     15      │     26     │     52      │      93      │
+└─────────────────────────────────────────────────┴─────────────┴────────────┴─────────────┴──────────────┘
+
+Summary MCP Static Token Usage
+┌─────────────────────────┬────────┐
+│      MCP component      │ Tokens │
+├─────────────────────────┼────────┤
+│ Instructions            │ 4527   │
+├─────────────────────────┼────────┤
+│ Tools                   │ 1666   │
+├─────────────────────────┼────────┤
+│ Prompts                 │ 0      │
+├─────────────────────────┼────────┤
+│ Resources and Templates │ 93     │
+├─────────────────────────┼────────┤
+│          TOTAL          │  6286  │
+└─────────────────────────┴────────┘
 ```
 
 ## Features
-- **Transport Support**: Supports both `stdio` (by executing a binary) and `http` (by connecting to a streaming HTTP endpoint) transports.
-- **Token Analysis**: Accurately counts tokens for tool names, descriptions, and input schemas using `tiktoken` (defaults to `cl100k_base` / GPT-4).
-- **Detailed Reporting**: Outputs a formatted table showing token breakdowns per tool.
+- Transport Support
+  - `stdio`: Execute a local binary
+  - `http`: Connect to a streaming HTTP endpoint
+- Comprehensive MCP Analysis
+  - Server Instructions: Token count for server-level instruction text
+  - Tools: Token breakdown for names, descriptions, and input schemas
+  - Prompts: Token breakdown for names, descriptions, and arguments
+  - Resources & Templates: Token breakdown for names, URIs, and descriptions
+- Token Counting
+  - Uses `tiktoken` (defaults to `cl100k_base` / GPT-4)
+- Detailed Reporting
+  - Formatted tables showing token breakdowns per component
+  - Summary of total static token usage across all MCP components
 
 ## Installation and Usage
 
