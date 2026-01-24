@@ -6,13 +6,14 @@ package analyzer
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/pkoukk/tiktoken-go"
 )
 
-// DefaultTokenEncoding is the default tiktoken encoding used when no model is specified.
-const DefaultTokenEncoding = "cl100k_base"
+// defaultTokenEncoding is the default tiktoken encoding used when no model is specified.
+const defaultTokenEncoding = "cl100k_base"
 
 // ToolTokens holds token count information for an MCP tool definition.
 type ToolTokens struct {
@@ -21,6 +22,14 @@ type ToolTokens struct {
 	DescTokens   int
 	SchemaTokens int
 	TotalTokens  int
+}
+
+// Add accumulates all numeric fields from other into the receiver.
+func (t *ToolTokens) Add(other ToolTokens) {
+	t.NameTokens += other.NameTokens
+	t.DescTokens += other.DescTokens
+	t.SchemaTokens += other.SchemaTokens
+	t.TotalTokens += other.TotalTokens
 }
 
 // PromptTokens holds token count information for an MCP prompt definition.
@@ -32,6 +41,14 @@ type PromptTokens struct {
 	TotalTokens int
 }
 
+// Add accumulates all numeric fields from other into the receiver.
+func (p *PromptTokens) Add(other PromptTokens) {
+	p.NameTokens += other.NameTokens
+	p.DescTokens += other.DescTokens
+	p.ArgsTokens += other.ArgsTokens
+	p.TotalTokens += other.TotalTokens
+}
+
 // ResourceTokens holds token count information for an MCP resource or resource template.
 type ResourceTokens struct {
 	Name        string
@@ -41,30 +58,55 @@ type ResourceTokens struct {
 	TotalTokens int
 }
 
-// TokenCounter wraps tiktoken to provide token counting for MCP artifacts.
+// Add accumulates all numeric fields from other into the receiver.
+func (r *ResourceTokens) Add(other ResourceTokens) {
+	r.NameTokens += other.NameTokens
+	r.URITokens += other.URITokens
+	r.DescTokens += other.DescTokens
+	r.TotalTokens += other.TotalTokens
+}
+
+// TokenCounter wraps tiktoken to provide thread-safe token counting for MCP artifacts.
+//
+// Thread safety: The underlying tiktoken encoder is not documented as thread-safe,
+// so TokenCounter uses a mutex to serialize access. When analyzing multiple servers
+// concurrently, all goroutines share the same TokenCounter instance, creating a
+// serialization point. This is acceptable for the current use case since token
+// counting is fast relative to network I/O, but could be optimized by using a
+// pool of encoders if profiling shows contention.
 type TokenCounter struct {
-	*tiktoken.Tiktoken
+	mu  sync.Mutex
+	enc *tiktoken.Tiktoken
 }
 
 // NewTokenCounter creates a TokenCounter using the encoding for the specified model.
-// If model is empty, it uses DefaultTokenEncoding.
+// If model is empty, it uses defaultTokenEncoding.
 func NewTokenCounter(model string) (*TokenCounter, error) {
 	var (
-		tkm *tiktoken.Tiktoken
-		err error
+		encoder *tiktoken.Tiktoken
+		err     error
 	)
 
 	if model != "" {
-		tkm, err = tiktoken.EncodingForModel(model)
+		encoder, err = tiktoken.EncodingForModel(model)
 	} else {
-		tkm, err = tiktoken.GetEncoding(DefaultTokenEncoding)
+		encoder, err = tiktoken.GetEncoding(defaultTokenEncoding)
 	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get encoding: %w", err)
 	}
 
-	return &TokenCounter{tkm}, nil
+	return &TokenCounter{enc: encoder}, nil
+}
+
+// CountTokens returns the number of tokens in the given text.
+// It is safe for concurrent use.
+func (c *TokenCounter) CountTokens(text string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return len(c.enc.Encode(text, nil, nil))
 }
 
 // AnalyzeTool counts tokens in a tool's name, description, and input schema.
@@ -75,9 +117,9 @@ func (c *TokenCounter) AnalyzeTool(tool *mcp.Tool) (ToolTokens, error) {
 	}
 	schemaStr := string(schemaBytes)
 
-	nameTokens := len(c.Encode(tool.Name, nil, nil))
-	descTokens := len(c.Encode(tool.Description, nil, nil))
-	schemaTokens := len(c.Encode(schemaStr, nil, nil))
+	nameTokens := c.CountTokens(tool.Name)
+	descTokens := c.CountTokens(tool.Description)
+	schemaTokens := c.CountTokens(schemaStr)
 
 	return ToolTokens{
 		Name:         tool.Name,
@@ -96,9 +138,9 @@ func (c *TokenCounter) AnalyzePrompt(prompt *mcp.Prompt) (PromptTokens, error) {
 	}
 	argsStr := string(argsBytes)
 
-	nameTokens := len(c.Encode(prompt.Name, nil, nil))
-	descTokens := len(c.Encode(prompt.Description, nil, nil))
-	argsTokens := len(c.Encode(argsStr, nil, nil))
+	nameTokens := c.CountTokens(prompt.Name)
+	descTokens := c.CountTokens(prompt.Description)
+	argsTokens := c.CountTokens(argsStr)
 
 	return PromptTokens{
 		Name:        prompt.Name,
@@ -111,9 +153,9 @@ func (c *TokenCounter) AnalyzePrompt(prompt *mcp.Prompt) (PromptTokens, error) {
 
 // AnalyzeResource counts tokens in a resource's name, URI, and description.
 func (c *TokenCounter) AnalyzeResource(resource *mcp.Resource) (ResourceTokens, error) {
-	nameTokens := len(c.Encode(resource.Name, nil, nil))
-	uriTokens := len(c.Encode(resource.URI, nil, nil))
-	descTokens := len(c.Encode(resource.Description, nil, nil))
+	nameTokens := c.CountTokens(resource.Name)
+	uriTokens := c.CountTokens(resource.URI)
+	descTokens := c.CountTokens(resource.Description)
 
 	return ResourceTokens{
 		Name:        resource.Name,
@@ -126,9 +168,9 @@ func (c *TokenCounter) AnalyzeResource(resource *mcp.Resource) (ResourceTokens, 
 
 // AnalyzeResourceTemplate counts tokens in a resource template's name, URI template, and description.
 func (c *TokenCounter) AnalyzeResourceTemplate(template *mcp.ResourceTemplate) (ResourceTokens, error) {
-	nameTokens := len(c.Encode(template.Name, nil, nil))
-	uriTokens := len(c.Encode(template.URITemplate, nil, nil))
-	descTokens := len(c.Encode(template.Description, nil, nil))
+	nameTokens := c.CountTokens(template.Name)
+	uriTokens := c.CountTokens(template.URITemplate)
+	descTokens := c.CountTokens(template.Description)
 
 	return ResourceTokens{
 		Name:        template.Name,

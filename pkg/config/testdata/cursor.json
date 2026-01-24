@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "prometheus": {
+      "command": "mcp-server-prometheus",
+      "args": ["--prometheus.url", "http://localhost:9090"],
+      "env": {
+        "LOG_LEVEL": "debug"
+      },
+      "envFile": ".env"
+    },
+    "secure-server": {
+      "url": "https://api.example.com/mcp",
+      "headers": {
+        "X-API-Key": "secret"
+      },
+      "auth": {
+        "CLIENT_ID": "my-client",
+        "CLIENT_SECRET": "my-secret",
+        "scopes": ["read", "write"]
+      },
+      "tls": {
+        "insecureSkipVerify": false,
+        "caCertFile": "/path/to/ca.crt"
+      }
+    }
+  }
+}

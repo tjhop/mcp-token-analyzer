@@ -6,29 +6,82 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
-	"strconv"
+	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/aquasecurity/table"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/tjhop/mcp-token-analyzer/pkg/analyzer"
+	"github.com/tjhop/mcp-token-analyzer/pkg/config"
 	"github.com/tjhop/mcp-token-analyzer/pkg/mcpclient"
 )
 
 const (
-	tableLabelTotal = "TOTAL"
+	tableLabelTotal          = "TOTAL"
+	maxConcurrentConnections = 10
+	unknownServerName        = "<unknown>"
 )
 
 var (
-	supportedMCPTransports = []string{"stdio", "http"}
+	supportedMCPTransports = []string{string(config.TransportStdio), string(config.TransportHTTP), string(config.TransportStreamableHTTP)}
 
-	flagMCPTransport   = kingpin.Flag("mcp.transport", "Transport to use (stdio, http)").Short('t').Default("stdio").Enum(supportedMCPTransports...)
+	// Flags for ad-hoc connections to individual MCP servers.
+	flagMCPTransport   = kingpin.Flag("mcp.transport", "Transport to use (stdio, http, streamable-http)").Short('t').Default("stdio").Enum(supportedMCPTransports...)
 	flagMCPCommand     = kingpin.Flag("mcp.command", "Command to run (for stdio transport)").Short('c').String()
 	flagMCPURL         = kingpin.Flag("mcp.url", "URL to connect to (for http transport)").Short('u').String()
 	flagTokenizerModel = kingpin.Flag("tokenizer.model", "Tokenizer model to use (e.g. gpt-4, gpt-3.5-turbo)").Short('m').Default("gpt-4").String()
 	// TODO (@tjhop): add `--tokenizer.list` flag to list available tokenizers/models and exit.
+
+	// Flags for working with mcp.json config files.
+	// Allows for connecting to multiple MCP servers at once.
+	flagConfigFile   = kingpin.Flag("config", "Path to mcp.json config file").Short('f').String()
+	flagServer       = kingpin.Flag("server", "Analyze only this named server from config").Short('s').String()
+	flagDetail       = kingpin.Flag("detail", "Show detailed per-server tables").Bool()
+	flagContextLimit = kingpin.Flag("limit", "Context window limit for percentage calculation").Int()
 )
+
+// ServerResult holds the analysis results for a single MCP server.
+type ServerResult struct {
+	Name                string
+	Error               error
+	InstructionTokens   int
+	TotalToolTokens     analyzer.ToolTokens
+	TotalPromptTokens   analyzer.PromptTokens
+	TotalResourceTokens analyzer.ResourceTokens
+
+	// Per-component stats for --detail mode
+	ToolStats     []analyzer.ToolTokens
+	PromptStats   []analyzer.PromptTokens
+	ResourceStats []analyzer.ResourceTokens
+}
+
+// TotalTokens returns the grand total of all tokens for this server.
+func (r *ServerResult) TotalTokens() int {
+	return r.InstructionTokens + r.TotalToolTokens.TotalTokens + r.TotalPromptTokens.TotalTokens + r.TotalResourceTokens.TotalTokens
+}
+
+// logAnalysisError prints an error message for a failed component analysis.
+func logAnalysisError(componentType, name string, err error) {
+	fmt.Fprintf(os.Stderr, "Error analyzing %s %s: %v\n", componentType, name, err)
+}
+
+// resolveServerName determines the display name for a server, preferring
+// the configured name over the server-reported name.
+func resolveServerName(configuredName string, serverInfo *mcp.Implementation) string {
+	switch {
+	case configuredName != "":
+		return configuredName
+	case serverInfo != nil:
+		return serverInfo.Name
+	default:
+		return unknownServerName
+	}
+}
 
 func main() {
 	kingpin.HelpFlag.Short('h')
@@ -45,239 +98,298 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	var (
-		client *mcpclient.Client
-		err    error
-	)
+	counter, err := analyzer.NewTokenCounter(*flagTokenizerModel)
+	if err != nil {
+		return fmt.Errorf("failed to initialize token counter: %w", err)
+	}
+
+	cfg, configDir, err := loadOrBuildConfig()
+	if err != nil {
+		return err
+	}
+
+	// Unified processing pipeline for both ad-hoc and file-based configs
+	cfg.InferDefaults()
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+
+	for _, warning := range cfg.Warnings() {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
+	}
+
+	return runAnalysis(ctx, cfg, configDir, counter)
+}
+
+// loadOrBuildConfig returns a Config from either a file or CLI flags.
+// It also returns the config directory for resolving relative paths (empty for ad-hoc mode).
+func loadOrBuildConfig() (*config.Config, string, error) {
+	if *flagConfigFile != "" {
+		cfg, err := config.LoadConfig(*flagConfigFile)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to load config: %w", err)
+		}
+		return cfg, filepath.Dir(*flagConfigFile), nil
+	}
+
+	// Build in-memory config from CLI flags
+	cfg, err := buildConfigFromFlags()
+	if err != nil {
+		return nil, "", err
+	}
+	return cfg, "", nil // Empty configDir - relative paths resolve from CWD
+}
+
+// buildConfigFromFlags creates a Config from CLI flags.
+// The resulting Config goes through the same InferDefaults/Validate pipeline as file-based configs.
+func buildConfigFromFlags() (*config.Config, error) {
+	srv := &config.ServerConfig{}
 
 	switch *flagMCPTransport {
 	case "stdio":
 		if *flagMCPCommand == "" {
-			return errors.New("--mcp.command is required for stdio transport")
+			return nil, errors.New("--mcp.command is required for stdio transport")
 		}
-		client, err = mcpclient.NewStdioClient(ctx, *flagMCPCommand)
-	case "http":
+		// Parse command string into command + args
+		parts := strings.Fields(*flagMCPCommand)
+		srv.Command = parts[0]
+		if len(parts) > 1 {
+			srv.Args = parts[1:]
+		}
+	case "http", "streamable-http":
 		if *flagMCPURL == "" {
-			return errors.New("--mcp.url is required for http transport")
+			return nil, errors.New("--mcp.url is required for http transport")
 		}
-		client, err = mcpclient.NewHTTPClient(ctx, *flagMCPURL)
+		srv.URL = *flagMCPURL
 	}
 
+	// Return as Config - Name is set from the map key, Type is inferred by InferDefaults()
+	return &config.Config{
+		MCPServers: map[string]*config.ServerConfig{
+			"": srv,
+		},
+	}, nil
+}
+
+// runAnalysis performs server analysis on the given config.
+// This is the unified analysis path for both ad-hoc and file-based configs.
+func runAnalysis(ctx context.Context, cfg *config.Config, configDir string, counter *analyzer.TokenCounter) error {
+	servers := cfg.GetServers()
+
+	// Filter to single server if specified
+	if *flagServer != "" {
+		srv, ok := servers[*flagServer]
+		if !ok {
+			return fmt.Errorf("server %q not found in config", *flagServer)
+		}
+		servers = map[string]*config.ServerConfig{*flagServer: srv}
+	}
+
+	if len(servers) == 0 {
+		return errors.New("no servers to analyze")
+	}
+
+	// If single server (either filtered or only one in config), use single-server output
+	if len(servers) == 1 {
+		for name, srv := range servers {
+			result := analyzeServer(ctx, name, srv, configDir, counter)
+			if result.Error != nil {
+				return fmt.Errorf("server %q: %w", name, result.Error)
+			}
+			renderSingleServerOutput(result)
+			return nil
+		}
+	}
+
+	// Multi-server mode: analyze all servers in parallel
+	results := connectAndAnalyzeAll(ctx, servers, configDir, counter)
+
+	// Render group summary
+	renderGroupSummary(results)
+
+	// Render detailed tables if requested
+	if *flagDetail {
+		renderDetailedTables(results)
+	}
+
+	// Report failure if any servers had errors, so the CLI exits with non-zero status.
+	var failCount int
+	for _, r := range results {
+		if r.Error != nil {
+			failCount++
+		}
+	}
+	if failCount > 0 {
+		return fmt.Errorf("%d of %d servers failed analysis", failCount, len(results))
+	}
+
+	return nil
+}
+
+// analyzeServer connects to a server and analyzes it.
+func analyzeServer(ctx context.Context, name string, srv *config.ServerConfig, configDir string, counter *analyzer.TokenCounter) *ServerResult {
+	client, err := mcpclient.NewClientFromConfig(ctx, srv, configDir)
 	if err != nil {
-		return fmt.Errorf("error creating client: %w", err)
+		return &ServerResult{Name: name, Error: err}
 	}
 	defer client.Close()
 
-	counter, err := analyzer.NewTokenCounter(*flagTokenizerModel)
-	if err != nil {
-		return fmt.Errorf("error creating counter: %w", err)
-	}
+	result := analyzeClient(ctx, client, counter)
+	result.Name = name
+	return result
+}
 
-	// Tokenize and report system instructions.
+// analyzeClient performs the analysis on an already-connected client.
+func analyzeClient(ctx context.Context, client *mcpclient.Client, counter *analyzer.TokenCounter) *ServerResult {
+	result := &ServerResult{}
+
+	// Get server name and instructions from the initialize response.
+	// The SDK should always return a non-nil result after successful connection,
+	// but we check defensively to avoid panics.
 	initResp := client.InitializeResult()
-	instrx := initResp.Instructions
-
-	initName := "<unset>"
-	if initResp.ServerInfo != nil {
-		initName = initResp.ServerInfo.Name
+	if initResp == nil {
+		result.Name = resolveServerName(client.Name, nil)
+		result.Error = errors.New("MCP session not initialized")
+		return result
 	}
 
-	fmt.Printf("\nMCP Server Instructions Analysis\n")
-	instrxTable := table.New(os.Stdout)
-	instrxTable.SetHeaders("MCP Server Name", "Instructions tokens")
-	instrxTokens := len(counter.Encode(instrx, nil, nil))
-	instrxTable.AddRow(initName, strconv.Itoa(instrxTokens))
-	instrxTable.Render()
+	result.Name = resolveServerName(client.Name, initResp.ServerInfo)
 
-	// Tokenize and report tools.
-	fmt.Printf("\nMCP Tool Analysis\n")
-	totalToolStats := analyzer.ToolTokens{Name: tableLabelTotal}
-	toolTable := table.New(os.Stdout)
-	toolTable.SetHeaders("Tool Name", "Name Tokens", "Desc Tokens", "Schema Tokens", "Total Tokens")
+	// Instructions
+	result.InstructionTokens = counter.CountTokens(initResp.Instructions)
+
+	// Analyze each component - all are optional since not all servers support all capabilities
+	result.ToolStats, result.TotalToolTokens = analyzeTools(ctx, client, counter)
+	result.PromptStats, result.TotalPromptTokens = analyzePrompts(ctx, client, counter)
+	result.ResourceStats, result.TotalResourceTokens = analyzeResources(ctx, client, counter)
+
+	return result
+}
+
+// analyzeTools lists and analyzes all tools from the server.
+// Returns the per-tool stats and the accumulated totals.
+// Not all servers support tools, so ListTools errors are logged as warnings.
+func analyzeTools(ctx context.Context, client *mcpclient.Client, counter *analyzer.TokenCounter) ([]analyzer.ToolTokens, analyzer.ToolTokens) {
+	total := analyzer.ToolTokens{Name: tableLabelTotal}
 
 	toolsResp, err := client.ListTools(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("error listing tools: %w", err)
+		fmt.Fprintf(os.Stderr, "Warning: failed to list tools for %s: %v\n", client.Name, err)
+		return nil, total
 	}
 
-	if toolsResp != nil {
-		tools := toolsResp.Tools
-		toolStats := make([]analyzer.ToolTokens, 0, len(tools))
-
-		for _, tool := range tools {
-			stats, err := counter.AnalyzeTool(tool)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error analyzing tool %s: %v\n", tool.Name, err)
-				continue
-			}
-			toolStats = append(toolStats, stats)
-			totalToolStats.NameTokens += stats.NameTokens
-			totalToolStats.DescTokens += stats.DescTokens
-			totalToolStats.SchemaTokens += stats.SchemaTokens
-			totalToolStats.TotalTokens += stats.TotalTokens
+	var stats []analyzer.ToolTokens
+	for _, tool := range toolsResp.Tools {
+		s, err := counter.AnalyzeTool(tool)
+		if err != nil {
+			logAnalysisError("tool", tool.Name, err)
+			continue
 		}
-
-		// Sort in descending order of total tokens for output.
-		sort.Slice(toolStats, func(i, j int) bool {
-			return toolStats[i].TotalTokens > toolStats[j].TotalTokens
-		})
-
-		for _, stats := range toolStats {
-			toolTable.AddRow(
-				stats.Name,
-				strconv.Itoa(stats.NameTokens),
-				strconv.Itoa(stats.DescTokens),
-				strconv.Itoa(stats.SchemaTokens),
-				strconv.Itoa(stats.TotalTokens),
-			)
-		}
+		stats = append(stats, s)
+		total.Add(s)
 	}
 
-	toolTable.AddFooters(
-		totalToolStats.Name,
-		strconv.Itoa(totalToolStats.NameTokens),
-		strconv.Itoa(totalToolStats.DescTokens),
-		strconv.Itoa(totalToolStats.SchemaTokens),
-		strconv.Itoa(totalToolStats.TotalTokens),
-	)
-	toolTable.Render()
+	return stats, total
+}
 
-	// Tokenize and report prompts.
-	fmt.Printf("\nMCP Prompt Analysis\n")
-	totalPromptStats := analyzer.PromptTokens{Name: tableLabelTotal}
-	promptTable := table.New(os.Stdout)
-	promptTable.SetHeaders("Prompt Name", "Name Tokens", "Desc Tokens", "Args Tokens", "Total Tokens")
+// analyzePrompts lists and analyzes all prompts from the server.
+// Not all servers support prompts, so ListPrompts errors are logged as warnings.
+func analyzePrompts(ctx context.Context, client *mcpclient.Client, counter *analyzer.TokenCounter) ([]analyzer.PromptTokens, analyzer.PromptTokens) {
+	total := analyzer.PromptTokens{Name: tableLabelTotal}
 
 	promptsResp, err := client.ListPrompts(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("error listing prompts: %w", err)
+		fmt.Fprintf(os.Stderr, "Warning: failed to list prompts for %s: %v\n", client.Name, err)
+		return nil, total
 	}
 
-	if promptsResp != nil {
-		prompts := promptsResp.Prompts
-		promptStats := make([]analyzer.PromptTokens, 0, len(prompts))
-
-		for _, prompt := range prompts {
-			stats, err := counter.AnalyzePrompt(prompt)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error analyzing prompt %s: %v\n", prompt.Name, err)
-				continue
-			}
-			promptStats = append(promptStats, stats)
-			totalPromptStats.NameTokens += stats.NameTokens
-			totalPromptStats.DescTokens += stats.DescTokens
-			totalPromptStats.ArgsTokens += stats.ArgsTokens
-			totalPromptStats.TotalTokens += stats.TotalTokens
+	var stats []analyzer.PromptTokens
+	for _, prompt := range promptsResp.Prompts {
+		s, err := counter.AnalyzePrompt(prompt)
+		if err != nil {
+			logAnalysisError("prompt", prompt.Name, err)
+			continue
 		}
-
-		// Sort in descending order of total tokens for output.
-		sort.Slice(promptStats, func(i, j int) bool {
-			return promptStats[i].TotalTokens > promptStats[j].TotalTokens
-		})
-
-		for _, stats := range promptStats {
-			promptTable.AddRow(
-				stats.Name,
-				strconv.Itoa(stats.NameTokens),
-				strconv.Itoa(stats.DescTokens),
-				strconv.Itoa(stats.ArgsTokens),
-				strconv.Itoa(stats.TotalTokens),
-			)
-		}
+		stats = append(stats, s)
+		total.Add(s)
 	}
 
-	promptTable.AddFooters(
-		totalPromptStats.Name,
-		strconv.Itoa(totalPromptStats.NameTokens),
-		strconv.Itoa(totalPromptStats.DescTokens),
-		strconv.Itoa(totalPromptStats.ArgsTokens),
-		strconv.Itoa(totalPromptStats.TotalTokens),
-	)
-	promptTable.Render()
+	return stats, total
+}
 
-	// Tokenize and report resources and resource templates.
-	fmt.Printf("\nMCP Resource Analysis\n")
-	resourceStats := make([]analyzer.ResourceTokens, 0)
-	totalResourceStats := analyzer.ResourceTokens{Name: tableLabelTotal}
-	resourceTable := table.New(os.Stdout)
-	resourceTable.SetHeaders("Resource Name", "Name Tokens", "URI Tokens", "Desc Tokens", "Total Tokens")
+// analyzeResources lists and analyzes all resources and resource templates from the server.
+// Not all servers support resources, so ListResources errors are logged as warnings.
+func analyzeResources(ctx context.Context, client *mcpclient.Client, counter *analyzer.TokenCounter) ([]analyzer.ResourceTokens, analyzer.ResourceTokens) {
+	total := analyzer.ResourceTokens{Name: tableLabelTotal}
 
 	resourcesResp, err := client.ListResources(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("error listing resources: %w", err)
+		fmt.Fprintf(os.Stderr, "Warning: failed to list resources for %s: %v\n", client.Name, err)
+		return nil, total
 	}
 
-	if resourcesResp != nil {
-		resources := resourcesResp.Resources
-
-		for _, resource := range resources {
-			stats, err := counter.AnalyzeResource(resource)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error analyzing resource %s: %v\n", resource.Name, err)
-				continue
-			}
-			resourceStats = append(resourceStats, stats)
-			totalResourceStats.NameTokens += stats.NameTokens
-			totalResourceStats.URITokens += stats.URITokens
-			totalResourceStats.DescTokens += stats.DescTokens
-			totalResourceStats.TotalTokens += stats.TotalTokens
+	var stats []analyzer.ResourceTokens
+	for _, resource := range resourcesResp.Resources {
+		s, err := counter.AnalyzeResource(resource)
+		if err != nil {
+			logAnalysisError("resource", resource.Name, err)
+			continue
 		}
+		stats = append(stats, s)
+		total.Add(s)
 	}
 
+	// Also list templates
 	templatesResp, err := client.ListResourceTemplates(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("error listing resource templates: %w", err)
+		fmt.Fprintf(os.Stderr, "Warning: failed to list resource templates for %s: %v\n", client.Name, err)
+		return stats, total
 	}
 
-	if templatesResp != nil {
-		for _, template := range templatesResp.ResourceTemplates {
-			stats, err := counter.AnalyzeResourceTemplate(template)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error analyzing resource template %s: %v\n", template.Name, err)
-				continue
-			}
-			resourceStats = append(resourceStats, stats)
-			totalResourceStats.NameTokens += stats.NameTokens
-			totalResourceStats.URITokens += stats.URITokens
-			totalResourceStats.DescTokens += stats.DescTokens
-			totalResourceStats.TotalTokens += stats.TotalTokens
+	for _, template := range templatesResp.ResourceTemplates {
+		s, err := counter.AnalyzeResourceTemplate(template)
+		if err != nil {
+			logAnalysisError("resource template", template.Name, err)
+			continue
 		}
+		stats = append(stats, s)
+		total.Add(s)
 	}
 
-	sort.Slice(resourceStats, func(i, j int) bool {
-		return resourceStats[i].TotalTokens > resourceStats[j].TotalTokens
+	return stats, total
+}
+
+// connectAndAnalyzeAll connects to all servers in parallel and returns results.
+// The servers map and its ServerConfig values are treated as read-only; concurrent
+// goroutines only read configuration data, never modify it.
+func connectAndAnalyzeAll(ctx context.Context, servers map[string]*config.ServerConfig, configDir string, counter *analyzer.TokenCounter) []*ServerResult {
+	var (
+		results []*ServerResult
+		mu      sync.Mutex
+	)
+
+	var g errgroup.Group
+	g.SetLimit(maxConcurrentConnections)
+
+	for name, srv := range servers {
+		g.Go(func() error {
+			result := analyzeServer(ctx, name, srv, configDir, counter)
+			mu.Lock()
+			defer mu.Unlock()
+			results = append(results, result)
+			// Don't return error - we want to continue analyzing other servers
+			return nil
+		})
+	}
+
+	// Errors are captured in individual results, not returned via errgroup.
+	// Each goroutine returns nil to allow all servers to be processed.
+	_ = g.Wait()
+
+	// Sort results by name for consistent output
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Name < results[j].Name
 	})
 
-	for _, stats := range resourceStats {
-		resourceTable.AddRow(
-			stats.Name,
-			strconv.Itoa(stats.NameTokens),
-			strconv.Itoa(stats.URITokens),
-			strconv.Itoa(stats.DescTokens),
-			strconv.Itoa(stats.TotalTokens),
-		)
-	}
-
-	resourceTable.AddFooters(
-		totalResourceStats.Name,
-		strconv.Itoa(totalResourceStats.NameTokens),
-		strconv.Itoa(totalResourceStats.URITokens),
-		strconv.Itoa(totalResourceStats.DescTokens),
-		strconv.Itoa(totalResourceStats.TotalTokens),
-	)
-	resourceTable.Render()
-
-	// Summary breakdown.
-	fmt.Printf("\nSummary MCP Static Token Usage\n")
-	grandTotal := instrxTokens + totalToolStats.TotalTokens + totalPromptStats.TotalTokens + totalResourceStats.TotalTokens
-	summaryTotalTable := table.New(os.Stdout)
-	summaryTotalTable.SetHeaders("MCP component", "Tokens")
-	summaryTotalTable.AddRow("Instructions", strconv.Itoa(instrxTokens))
-	summaryTotalTable.AddRow("Tools", strconv.Itoa(totalToolStats.TotalTokens))
-	summaryTotalTable.AddRow("Prompts", strconv.Itoa(totalPromptStats.TotalTokens))
-	summaryTotalTable.AddRow("Resources and Templates", strconv.Itoa(totalResourceStats.TotalTokens))
-	summaryTotalTable.AddFooters(tableLabelTotal, strconv.Itoa(grandTotal))
-	summaryTotalTable.Render()
-
-	return nil
+	return results
 }

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "local-tools": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-tools"]
+    },
+    "remote-api": {
+      "type": "streamable-http",
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer token456"
+      }
+    }
+  }
+}

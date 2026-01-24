@@ -129,6 +129,10 @@ Summary MCP Static Token Usage
 - Transport Support
   - `stdio`: Execute a local binary
   - `http`: Connect to a streaming HTTP endpoint
+- Configuration File Support
+  - Load server configurations from `mcp.json` files
+  - Compatible with Claude Desktop, Cursor, and VS Code formats
+  - Analyze multiple MCP servers in parallel
 - Comprehensive MCP Analysis
   - Server Instructions: Token count for server-level instruction text
   - Tools: Token breakdown for names, descriptions, and input schemas
@@ -139,6 +143,7 @@ Summary MCP Static Token Usage
 - Detailed Reporting
   - Formatted tables showing token breakdowns per component
   - Summary of total static token usage across all MCP components
+  - Group summary for multi-server analysis
 
 ## Installation and Usage
 
@@ -198,6 +203,58 @@ Targets:
   test                           run tests
 ```
 
+## Configuration Files
+
+The tool can load MCP server configurations from JSON files, supporting formats used by Claude Desktop, Cursor, and VS Code.
+
+### Supported Formats
+
+**Claude Desktop / Cursor format** (`mcpServers` key):
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-filesystem", "/tmp"],
+      "env": { "DEBUG": "true" }
+    },
+    "remote-api": {
+      "url": "http://localhost:3000/mcp",
+      "headers": { "Authorization": "Bearer token123" }
+    }
+  }
+}
+```
+
+**VS Code format** (`servers` key):
+```json
+{
+  "servers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-postgres"]
+    }
+  }
+}
+```
+
+### Server Configuration Options
+
+| Field | Description |
+|-------|-------------|
+| `command` | Command to execute (stdio transport) |
+| `args` | Command arguments (stdio transport) |
+| `url` | Server URL (http transport, must be http:// or https://) |
+| `env` | Environment variables for the process |
+| `envFile` | Path to .env file (relative to config file) |
+| `headers` | HTTP headers for requests (http transport) |
+
+The transport type (`stdio` or `http`) is automatically inferred from the presence of `command` or `url` fields.
+
+### Multi-Server Output
+
+When analyzing multiple servers, the tool displays a group summary showing token usage across all servers. In `--detail` mode, tools, prompts, and resources are shown with namespaced identifiers using the format `server__component` (e.g., `prometheus__query`) to ensure uniqueness across servers.
+
 ## Command Line Flags
 
 ```bash
@@ -209,4 +266,8 @@ Flags:
   -c, --mcp.command=MCP.COMMAND  Command to run (for stdio transport)
   -u, --mcp.url=MCP.URL          URL to connect to (for http transport)
   -m, --tokenizer.model="gpt-4"  Tokenizer model to use (e.g. gpt-4, gpt-3.5-turbo)
+  -f, --config=CONFIG            Path to mcp.json config file
+  -s, --server=SERVER            Analyze only this named server from config
+      --detail                   Show detailed per-server tables
+      --limit=LIMIT              Context window limit for percentage calculation
 ```
