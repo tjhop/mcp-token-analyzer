@@ -195,8 +195,6 @@ Targets:
   binary                         build a binary
   build                          alias for `binary`
   build-all                      test release process with goreleaser, does not publish/upload
-  container                      build container images with goreleaser, alias for `build-all`
-  image                          build container images with goreleaser, alias for `build-all`
   test                           run tests
 ```
 
