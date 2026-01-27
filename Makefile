@@ -25,9 +25,5 @@ build: binary ## alias for `binary`
 build-all: fmt tidy lint ## test release process with goreleaser, does not publish/upload
 	goreleaser release --snapshot --clean
 
-container: build-all ## build container images with goreleaser, alias for `build-all`
-
-image: build-all ## build container images with goreleaser, alias for `build-all`
-
 test: fmt tidy ## run tests
 	go test -race -v ./...
