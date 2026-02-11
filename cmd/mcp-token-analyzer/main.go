@@ -268,18 +268,17 @@ func analyzeClient(ctx context.Context, client *mcpclient.Client, counter *analy
 
 // analyzeTools lists and analyzes all tools from the server.
 // Returns the per-tool stats and the accumulated totals.
-// Not all servers support tools, so ListTools errors are logged as warnings.
+// Uses the SDK's paginating iterator to ensure all tools are retrieved.
+// Not all servers support tools, so listing errors are logged as warnings.
 func analyzeTools(ctx context.Context, client *mcpclient.Client, counter *analyzer.TokenCounter) ([]analyzer.ToolTokens, analyzer.ToolTokens) {
 	total := analyzer.ToolTokens{Name: tableLabelTotal}
 
-	toolsResp, err := client.ListTools(ctx, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to list tools for %s: %v\n", client.Name, err)
-		return nil, total
-	}
-
 	var stats []analyzer.ToolTokens
-	for _, tool := range toolsResp.Tools {
+	for tool, err := range client.Tools(ctx, nil) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to list tools for %s: %v\n", client.Name, err)
+			break
+		}
 		s, err := counter.AnalyzeTool(tool)
 		if err != nil {
 			logAnalysisError("tool", tool.Name, err)
@@ -293,18 +292,17 @@ func analyzeTools(ctx context.Context, client *mcpclient.Client, counter *analyz
 }
 
 // analyzePrompts lists and analyzes all prompts from the server.
-// Not all servers support prompts, so ListPrompts errors are logged as warnings.
+// Uses the SDK's paginating iterator to ensure all prompts are retrieved.
+// Not all servers support prompts, so listing errors are logged as warnings.
 func analyzePrompts(ctx context.Context, client *mcpclient.Client, counter *analyzer.TokenCounter) ([]analyzer.PromptTokens, analyzer.PromptTokens) {
 	total := analyzer.PromptTokens{Name: tableLabelTotal}
 
-	promptsResp, err := client.ListPrompts(ctx, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to list prompts for %s: %v\n", client.Name, err)
-		return nil, total
-	}
-
 	var stats []analyzer.PromptTokens
-	for _, prompt := range promptsResp.Prompts {
+	for prompt, err := range client.Prompts(ctx, nil) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to list prompts for %s: %v\n", client.Name, err)
+			break
+		}
 		s, err := counter.AnalyzePrompt(prompt)
 		if err != nil {
 			logAnalysisError("prompt", prompt.Name, err)
@@ -318,18 +316,17 @@ func analyzePrompts(ctx context.Context, client *mcpclient.Client, counter *anal
 }
 
 // analyzeResources lists and analyzes all resources and resource templates from the server.
-// Not all servers support resources, so ListResources errors are logged as warnings.
+// Uses the SDK's paginating iterators to ensure all items are retrieved.
+// Not all servers support resources, so listing errors are logged as warnings.
 func analyzeResources(ctx context.Context, client *mcpclient.Client, counter *analyzer.TokenCounter) ([]analyzer.ResourceTokens, analyzer.ResourceTokens) {
 	total := analyzer.ResourceTokens{Name: tableLabelTotal}
 
-	resourcesResp, err := client.ListResources(ctx, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to list resources for %s: %v\n", client.Name, err)
-		return nil, total
-	}
-
 	var stats []analyzer.ResourceTokens
-	for _, resource := range resourcesResp.Resources {
+	for resource, err := range client.Resources(ctx, nil) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to list resources for %s: %v\n", client.Name, err)
+			break
+		}
 		s, err := counter.AnalyzeResource(resource)
 		if err != nil {
 			logAnalysisError("resource", resource.Name, err)
@@ -339,14 +336,11 @@ func analyzeResources(ctx context.Context, client *mcpclient.Client, counter *an
 		total.Add(s)
 	}
 
-	// Also list templates
-	templatesResp, err := client.ListResourceTemplates(ctx, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to list resource templates for %s: %v\n", client.Name, err)
-		return stats, total
-	}
-
-	for _, template := range templatesResp.ResourceTemplates {
+	for template, err := range client.ResourceTemplates(ctx, nil) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to list resource templates for %s: %v\n", client.Name, err)
+			break
+		}
 		s, err := counter.AnalyzeResourceTemplate(template)
 		if err != nil {
 			logAnalysisError("resource template", template.Name, err)
