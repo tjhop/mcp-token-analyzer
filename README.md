@@ -15,120 +15,58 @@ Example analyzing [prometheus-mcp-server](https://github.com/tjhop/prometheus-mc
 
 ```bash
 ~/go/src/github.com/tjhop/mcp-token-analyzer (main [ ]) -> ./mcp-token-analyzer --mcp.transport http --mcp.url "http://localhost:8080/mcp"
-MCP Server Instructions Analysis
-┌───────────────────────┬─────────────────────┐
-│    MCP Server Name    │ Instructions tokens │
-├───────────────────────┼─────────────────────┤
-│ prometheus-mcp-server │ 4527                │
-└───────────────────────┴─────────────────────┘
+Token Analysis Summary
+┌───────────────────────┬──────────────┬───────┬─────────┬───────────┬──────────────┐
+│      MCP Server       │ Instructions │ Tools │ Prompts │ Resources │ Total Tokens │
+├───────────────────────┼──────────────┼───────┼─────────┼───────────┼──────────────┤
+│ prometheus-mcp-server │ 4,527        │ 1,666 │ 0       │ 93        │ 6,286        │
+├───────────────────────┼──────────────┼───────┼─────────┼───────────┼──────────────┤
+│         TOTAL         │    4,527     │ 1,666 │    0    │    93     │    6,286     │
+└───────────────────────┴──────────────┴───────┴─────────┴───────────┴──────────────┘
 
-MCP Tool Analysis
-┌───────────────────┬─────────────┬─────────────┬───────────────┬──────────────┐
-│     Tool Name     │ Name Tokens │ Desc Tokens │ Schema Tokens │ Total Tokens │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ label_values      │ 2           │ 16          │ 156           │ 174          │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ range_query       │ 2           │ 8           │ 156           │ 166          │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ label_names       │ 2           │ 18          │ 135           │ 155          │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ series            │ 1           │ 6           │ 143           │ 150          │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ exemplar_query    │ 4           │ 9           │ 132           │ 145          │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ delete_series     │ 2           │ 11          │ 107           │ 120          │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ query             │ 1           │ 8           │ 91            │ 100          │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ targets_metadata  │ 2           │ 10          │ 68            │ 80           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ docs_search       │ 2           │ 14          │ 49            │ 65           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ metric_metadata   │ 2           │ 11          │ 48            │ 61           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ snapshot          │ 1           │ 29          │ 30            │ 60           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ docs_read         │ 2           │ 15          │ 34            │ 51           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ ready             │ 1           │ 23          │ 10            │ 34           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ reload            │ 1           │ 19          │ 10            │ 30           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ clean_tombstones  │ 4           │ 14          │ 10            │ 28           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ quit              │ 1           │ 15          │ 10            │ 26           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ tsdb_stats        │ 3           │ 10          │ 10            │ 23           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ healthy           │ 1           │ 12          │ 10            │ 23           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ list_rules        │ 2           │ 10          │ 10            │ 22           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ alertmanagers     │ 3           │ 7           │ 10            │ 20           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ docs_list         │ 2           │ 7           │ 10            │ 19           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ wal_replay_status │ 4           │ 5           │ 10            │ 19           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ list_targets      │ 2           │ 6           │ 10            │ 18           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ list_alerts       │ 3           │ 4           │ 10            │ 17           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ runtime_info      │ 2           │ 4           │ 10            │ 16           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ build_info        │ 2           │ 4           │ 10            │ 16           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ flags             │ 1           │ 3           │ 10            │ 14           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│ config            │ 1           │ 3           │ 10            │ 14           │
-├───────────────────┼─────────────┼─────────────┼───────────────┼──────────────┤
-│       TOTAL       │     56      │     301     │     1309      │     1666     │
-└───────────────────┴─────────────┴─────────────┴───────────────┴──────────────┘
+Tool Analysis (sorted by total tokens)
+┌───────────────────────┬───────────────────┬──────┬──────┬────────┬───────┐
+│        Server         │       Tool        │ Name │ Desc │ Schema │ Total │
+├───────────────────────┼───────────────────┼──────┼──────┼────────┼───────┤
+│ prometheus-mcp-server │ label_values      │ 2    │ 16   │ 156    │ 174   │
+├───────────────────────┼───────────────────┼──────┼──────┼────────┼───────┤
+│ prometheus-mcp-server │ range_query       │ 2    │ 8    │ 156    │ 166   │
+├───────────────────────┼───────────────────┼──────┼──────┼────────┼───────┤
+│ prometheus-mcp-server │ label_names       │ 2    │ 18   │ 135    │ 155   │
+├───────────────────────┼───────────────────┼──────┼──────┼────────┼───────┤
+│            ...        │       ...         │ ...  │ ...  │  ...   │  ...  │
+├───────────────────────┼───────────────────┼──────┼──────┼────────┼───────┤
+│ prometheus-mcp-server │ flags             │ 1    │ 3    │ 10     │ 14    │
+├───────────────────────┼───────────────────┼──────┼──────┼────────┼───────┤
+│ prometheus-mcp-server │ config            │ 1    │ 3    │ 10     │ 14    │
+└───────────────────────┴───────────────────┴──────┴──────┴────────┴───────┘
 
-MCP Prompt Analysis
-┌─────────────┬─────────────┬─────────────┬─────────────┬──────────────┐
-│ Prompt Name │ Name Tokens │ Desc Tokens │ Args Tokens │ Total Tokens │
-├─────────────┼─────────────┼─────────────┼─────────────┼──────────────┤
-│    TOTAL    │      0      │      0      │      0      │      0       │
-└─────────────┴─────────────┴─────────────┴─────────────┴──────────────┘
-
-MCP Resource Analysis
-┌─────────────────────────────────────────────────┬─────────────┬────────────┬─────────────┬──────────────┐
-│                  Resource Name                  │ Name Tokens │ URI Tokens │ Desc Tokens │ Total Tokens │
-├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
-│ List of Official Prometheus Documentation Files │ 6           │ 4          │ 15          │ 25           │
-├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
-│ Official Prometheus Documentation               │ 3           │ 7          │ 15          │ 25           │
-├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
-│ TSDB Stats                                      │ 3           │ 6          │ 9           │ 18           │
-├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
-│ Targets                                         │ 1           │ 4          │ 10          │ 15           │
-├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
-│ List metrics                                    │ 2           │ 5          │ 3           │ 10           │
-├─────────────────────────────────────────────────┼─────────────┼────────────┼─────────────┼──────────────┤
-│                      TOTAL                      │     15      │     26     │     52      │      93      │
-└─────────────────────────────────────────────────┴─────────────┴────────────┴─────────────┴──────────────┘
-
-Summary MCP Static Token Usage
-┌─────────────────────────┬────────┐
-│      MCP component      │ Tokens │
-├─────────────────────────┼────────┤
-│ Instructions            │ 4527   │
-├─────────────────────────┼────────┤
-│ Tools                   │ 1666   │
-├─────────────────────────┼────────┤
-│ Prompts                 │ 0      │
-├─────────────────────────┼────────┤
-│ Resources and Templates │ 93     │
-├─────────────────────────┼────────┤
-│          TOTAL          │  6286  │
-└─────────────────────────┴────────┘
+Resource Analysis (sorted by total tokens)
+┌───────────────────────┬─────────────────────────────────────────────────┬──────┬─────┬──────┬───────┐
+│        Server         │                    Resource                     │ Name │ URI │ Desc │ Total │
+├───────────────────────┼─────────────────────────────────────────────────┼──────┼─────┼──────┼───────┤
+│ prometheus-mcp-server │ List of Official Prometheus Documentation Files │ 6    │ 4   │ 15   │ 25    │
+├───────────────────────┼─────────────────────────────────────────────────┼──────┼─────┼──────┼───────┤
+│ prometheus-mcp-server │ Official Prometheus Documentation               │ 3    │ 7   │ 15   │ 25    │
+├───────────────────────┼─────────────────────────────────────────────────┼──────┼─────┼──────┼───────┤
+│ prometheus-mcp-server │ TSDB Stats                                      │ 3    │ 6   │ 9    │ 18    │
+├───────────────────────┼─────────────────────────────────────────────────┼──────┼─────┼──────┼───────┤
+│ prometheus-mcp-server │ Targets                                         │ 1    │ 4   │ 10   │ 15    │
+├───────────────────────┼─────────────────────────────────────────────────┼──────┼─────┼──────┼───────┤
+│ prometheus-mcp-server │ List metrics                                    │ 2    │ 5   │ 3    │ 10    │
+└───────────────────────┴─────────────────────────────────────────────────┴──────┴─────┴──────┴───────┘
 ```
 
 ## Features
 - Transport Support
   - `stdio`: Execute a local binary
   - `http`: Connect to a streaming HTTP endpoint
+  - `streamable-http`: Alias for `http`, used by some MCP clients (Continue, Roo Code, Anthropic MCP Registry)
+- Configuration File Support
+  - Load server configurations from `mcp.json` files
+  - Compatible with Claude Desktop, Cursor, VS Code, and Continue formats
+  - Analyze multiple MCP servers in parallel
+  - Filter to a single server with `--server`
 - Comprehensive MCP Analysis
   - Server Instructions: Token count for server-level instruction text
   - Tools: Token breakdown for names, descriptions, and input schemas
@@ -136,9 +74,11 @@ Summary MCP Static Token Usage
   - Resources & Templates: Token breakdown for names, URIs, and descriptions
 - Token Counting
   - Uses `tiktoken` (defaults to `cl100k_base` / GPT-4)
-- Detailed Reporting
-  - Formatted tables showing token breakdowns per component
-  - Summary of total static token usage across all MCP components
+  - Configurable tokenizer model via `--tokenizer.model`
+- Reporting
+  - Summary table showing token usage per server
+  - Detail tables showing per-component token breakdowns (always shown for single-server, opt-in via `--detail` for multi-server)
+  - Context window percentage calculation via `--limit`
 
 ## Installation and Usage
 
@@ -165,11 +105,12 @@ _Note_: While packages are built for several systems, there are currently no pla
 
 ```bash
 make build
-./dist/mcp-token-analyzer_linux_amd64_v1/mcp-token-analyzer --help
+./mcp-token-analyzer --help
 ```
 
 ## Security and Authentication
-TODO
+
+OAuth 2.0 and custom TLS configuration fields are parsed from config files but not yet implemented. When present, a warning is emitted. See the [ROADMAP](ROADMAP.md) for planned authentication support.
 
 ## Development
 ### Development Environment with Devbox + Direnv
@@ -198,15 +139,90 @@ Targets:
   test                           run tests
 ```
 
+## Configuration Files
+
+The tool can load MCP server configurations from JSON files, supporting formats used by Claude Desktop, Cursor, VS Code, and Continue.
+
+### Supported Formats
+
+**Claude Desktop / Cursor format** (`mcpServers` key):
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-filesystem", "/tmp"],
+      "env": { "DEBUG": "true" }
+    },
+    "remote-api": {
+      "url": "http://localhost:3000/mcp",
+      "headers": { "Authorization": "Bearer token123" }
+    }
+  }
+}
+```
+
+**VS Code format** (`servers` key):
+```json
+{
+  "servers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-postgres"]
+    }
+  }
+}
+```
+
+**Continue format** (`mcpServers` with explicit `streamable-http` type):
+```json
+{
+  "mcpServers": {
+    "remote-api": {
+      "type": "streamable-http",
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+Both `mcpServers` and `servers` keys can be present in the same file; `mcpServers` takes precedence for duplicate server names.
+
+### Server Configuration Options
+
+| Field | Description |
+|-------|-------------|
+| `type` | Transport type (optional, inferred from `command` or `url` if omitted) |
+| `command` | Command to execute (stdio transport) |
+| `args` | Command arguments (stdio transport) |
+| `url` | Server URL (http transport, must be http:// or https://) |
+| `env` | Environment variables for the process |
+| `envFile` | Path to .env file (relative to config file location) |
+| `headers` | HTTP headers for requests (http transport) |
+
+The transport type (`stdio` or `http`) is automatically inferred from the presence of `command` or `url` fields. The `streamable-http` type is accepted and normalized to `http`.
+
+### Multi-Server Output
+
+When analyzing multiple servers, the tool displays a summary table showing token usage across all servers. Use `--detail` to additionally display per-component detail tables (tools, prompts, resources) with entries from all servers sorted by total tokens. Each row includes the server name so components can be traced back to their origin.
+
+When analyzing a single server (either ad-hoc via CLI flags or via `--server`), detail tables are always shown automatically.
+
 ## Command Line Flags
 
-```bash
+```
 usage: mcp-token-analyzer [<flags>]
 
 Flags:
-  -h, --[no-]help                Show context-sensitive help (also try --help-long and --help-man).
-  -t, --mcp.transport="stdio"    Transport to use (stdio, http)
+  -h, --[no-]help                Show context-sensitive help (also try
+                                 --help-long and --help-man).
+  -t, --mcp.transport=stdio      Transport to use (stdio, http, streamable-http)
   -c, --mcp.command=MCP.COMMAND  Command to run (for stdio transport)
   -u, --mcp.url=MCP.URL          URL to connect to (for http transport)
-  -m, --tokenizer.model="gpt-4"  Tokenizer model to use (e.g. gpt-4, gpt-3.5-turbo)
+  -m, --tokenizer.model="gpt-4"  Tokenizer model to use (e.g. gpt-4,
+                                 gpt-3.5-turbo)
+  -f, --config=CONFIG            Path to mcp.json config file
+  -s, --server=SERVER            Analyze only this named server from config
+      --[no-]detail              Show detailed per-server tables
+      --limit=LIMIT              Context window limit for percentage calculation
 ```

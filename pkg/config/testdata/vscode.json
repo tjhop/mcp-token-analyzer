@@ -1,0 +1,17 @@
+{
+  "servers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-postgres"],
+      "env": {
+        "DATABASE_URL": "postgres://localhost/mydb"
+      }
+    },
+    "remote-api": {
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer token123"
+      }
+    }
+  }
+}

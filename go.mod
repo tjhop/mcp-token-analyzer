@@ -7,6 +7,8 @@ require (
 	github.com/aquasecurity/table v1.11.0
 	github.com/modelcontextprotocol/go-sdk v1.2.0
 	github.com/pkoukk/tiktoken-go v0.1.8
+	golang.org/x/sync v0.19.0
+	golang.org/x/text v0.33.0
 )
 
 require (
