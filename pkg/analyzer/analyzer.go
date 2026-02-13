@@ -17,11 +17,13 @@ const defaultTokenEncoding = "cl100k_base"
 
 // ToolTokens holds token count information for an MCP tool definition.
 type ToolTokens struct {
-	Name         string
-	NameTokens   int
-	DescTokens   int
-	SchemaTokens int
-	TotalTokens  int
+	Name               string
+	NameTokens         int
+	DescTokens         int
+	SchemaTokens       int
+	OutputSchemaTokens int
+	AnnotationsTokens  int
+	TotalTokens        int
 }
 
 // Add accumulates all numeric fields from other into the receiver.
@@ -29,6 +31,8 @@ func (t *ToolTokens) Add(other ToolTokens) {
 	t.NameTokens += other.NameTokens
 	t.DescTokens += other.DescTokens
 	t.SchemaTokens += other.SchemaTokens
+	t.OutputSchemaTokens += other.OutputSchemaTokens
+	t.AnnotationsTokens += other.AnnotationsTokens
 	t.TotalTokens += other.TotalTokens
 }
 
@@ -109,24 +113,44 @@ func (c *TokenCounter) CountTokens(text string) int {
 	return len(c.enc.Encode(text, nil, nil))
 }
 
-// AnalyzeTool counts tokens in a tool's name, description, and input schema.
+// AnalyzeTool counts tokens in a tool's name, description, input schema,
+// output schema, and annotations.
 func (c *TokenCounter) AnalyzeTool(tool *mcp.Tool) (ToolTokens, error) {
 	schemaBytes, err := json.Marshal(tool.InputSchema)
 	if err != nil {
 		return ToolTokens{}, fmt.Errorf("failed to marshal input schema: %w", err)
 	}
-	schemaStr := string(schemaBytes)
 
 	nameTokens := c.CountTokens(tool.Name)
 	descTokens := c.CountTokens(tool.Description)
-	schemaTokens := c.CountTokens(schemaStr)
+	schemaTokens := c.CountTokens(string(schemaBytes))
+
+	var outputSchemaTokens int
+	if tool.OutputSchema != nil {
+		outputBytes, err := json.Marshal(tool.OutputSchema)
+		if err != nil {
+			return ToolTokens{}, fmt.Errorf("failed to marshal output schema: %w", err)
+		}
+		outputSchemaTokens = c.CountTokens(string(outputBytes))
+	}
+
+	var annotationsTokens int
+	if tool.Annotations != nil {
+		annotBytes, err := json.Marshal(tool.Annotations)
+		if err != nil {
+			return ToolTokens{}, fmt.Errorf("failed to marshal annotations: %w", err)
+		}
+		annotationsTokens = c.CountTokens(string(annotBytes))
+	}
 
 	return ToolTokens{
-		Name:         tool.Name,
-		NameTokens:   nameTokens,
-		DescTokens:   descTokens,
-		SchemaTokens: schemaTokens,
-		TotalTokens:  nameTokens + descTokens + schemaTokens,
+		Name:               tool.Name,
+		NameTokens:         nameTokens,
+		DescTokens:         descTokens,
+		SchemaTokens:       schemaTokens,
+		OutputSchemaTokens: outputSchemaTokens,
+		AnnotationsTokens:  annotationsTokens,
+		TotalTokens:        nameTokens + descTokens + schemaTokens + outputSchemaTokens + annotationsTokens,
 	}, nil
 }
 

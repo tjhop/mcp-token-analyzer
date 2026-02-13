@@ -134,7 +134,7 @@ func renderDetailTables(results []*ServerResult) {
 	renderDetailTable(
 		results,
 		"Tool Analysis (sorted by total tokens)",
-		[]string{"Server", "Tool", "Name", "Desc", "Schema", "Total"},
+		[]string{"Server", "Tool", "Name", "Desc", "Schema", "Output", "Annot.", "Total"},
 		func(r *ServerResult) []analyzer.ToolTokens { return r.ToolStats },
 		func(t analyzer.ToolTokens) string { return t.Name },
 		func(t analyzer.ToolTokens) int { return t.TotalTokens },
@@ -143,6 +143,8 @@ func renderDetailTables(results []*ServerResult) {
 				strconv.Itoa(t.NameTokens),
 				strconv.Itoa(t.DescTokens),
 				strconv.Itoa(t.SchemaTokens),
+				strconv.Itoa(t.OutputSchemaTokens),
+				strconv.Itoa(t.AnnotationsTokens),
 				strconv.Itoa(t.TotalTokens),
 			}
 		},
