@@ -213,6 +213,9 @@ func runAnalysis(ctx context.Context, cfg *config.Config, configDir string, coun
 }
 
 // analyzeServer connects to a server and analyzes it.
+// Name resolution is handled here: the configured name (map key) takes
+// precedence over the server-reported name from the init response. When
+// running ad-hoc (empty map key), the server-reported name is used as fallback.
 func analyzeServer(ctx context.Context, name string, srv *config.ServerConfig, configDir string, counter *analyzer.TokenCounter) *ServerResult {
 	client, err := mcpclient.NewClientFromConfig(ctx, srv, configDir)
 	if err != nil {
@@ -222,13 +225,15 @@ func analyzeServer(ctx context.Context, name string, srv *config.ServerConfig, c
 
 	result := analyzeClient(ctx, client, counter)
 
-	// The configured name (map key) takes precedence over the
-	// server-reported name from the init result. When running ad-hoc
-	// (empty map key), preserve the name that analyzeClient resolved
-	// from the server's initialization response.
-	if name != "" {
-		result.Name = name
+	// Resolve the final display name from the configured name and
+	// whatever the server reported during initialization.
+	initResp := client.InitializeResult()
+	var serverInfo *mcp.Implementation
+	if initResp != nil {
+		serverInfo = initResp.ServerInfo
 	}
+	result.Name = resolveServerName(name, serverInfo)
+
 	return result
 }
 
@@ -236,15 +241,11 @@ func analyzeServer(ctx context.Context, name string, srv *config.ServerConfig, c
 func analyzeClient(ctx context.Context, client *mcpclient.Client, counter *analyzer.TokenCounter) *ServerResult {
 	result := &ServerResult{}
 
-	// Get server name and instructions from the initialize response.
 	initResp := client.InitializeResult()
 	if initResp == nil {
-		result.Name = resolveServerName(client.Name, nil)
 		result.Error = errors.New("MCP session not initialized")
 		return result
 	}
-
-	result.Name = resolveServerName(client.Name, initResp.ServerInfo)
 
 	// Instructions
 	result.InstructionTokens = counter.CountTokens(initResp.Instructions)
