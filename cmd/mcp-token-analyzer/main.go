@@ -274,13 +274,13 @@ func analyzeTools(ctx context.Context, client *mcpclient.Client, counter *analyz
 			fmt.Fprintf(os.Stderr, "Warning: failed to list tools for %s: %v\n", client.Name, err)
 			break
 		}
-		s, err := counter.AnalyzeTool(tool)
+		toolStats, err := counter.AnalyzeTool(tool)
 		if err != nil {
 			logAnalysisError("tool", tool.Name, err)
 			continue
 		}
-		stats = append(stats, s)
-		total.Add(s)
+		stats = append(stats, toolStats)
+		total.Add(toolStats)
 	}
 
 	return stats, total
@@ -303,13 +303,13 @@ func analyzePrompts(ctx context.Context, client *mcpclient.Client, counter *anal
 			fmt.Fprintf(os.Stderr, "Warning: failed to list prompts for %s: %v\n", client.Name, err)
 			break
 		}
-		s, err := counter.AnalyzePrompt(prompt)
+		promptStats, err := counter.AnalyzePrompt(prompt)
 		if err != nil {
 			logAnalysisError("prompt", prompt.Name, err)
 			continue
 		}
-		stats = append(stats, s)
-		total.Add(s)
+		stats = append(stats, promptStats)
+		total.Add(promptStats)
 	}
 
 	return stats, total
@@ -327,13 +327,13 @@ func analyzeResources(ctx context.Context, client *mcpclient.Client, counter *an
 			fmt.Fprintf(os.Stderr, "Warning: failed to list resources for %s: %v\n", client.Name, err)
 			break
 		}
-		s, err := counter.AnalyzeResource(resource)
+		resourceStats, err := counter.AnalyzeResource(resource)
 		if err != nil {
 			logAnalysisError("resource", resource.Name, err)
 			continue
 		}
-		stats = append(stats, s)
-		total.Add(s)
+		stats = append(stats, resourceStats)
+		total.Add(resourceStats)
 	}
 
 	for template, err := range client.ResourceTemplates(ctx, nil) {
@@ -341,13 +341,13 @@ func analyzeResources(ctx context.Context, client *mcpclient.Client, counter *an
 			fmt.Fprintf(os.Stderr, "Warning: failed to list resource templates for %s: %v\n", client.Name, err)
 			break
 		}
-		s, err := counter.AnalyzeResourceTemplate(template)
+		templateStats, err := counter.AnalyzeResourceTemplate(template)
 		if err != nil {
 			logAnalysisError("resource template", template.Name, err)
 			continue
 		}
-		stats = append(stats, s)
-		total.Add(s)
+		stats = append(stats, templateStats)
+		total.Add(templateStats)
 	}
 
 	return stats, total
