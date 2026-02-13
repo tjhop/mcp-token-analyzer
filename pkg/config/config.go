@@ -71,6 +71,10 @@ type TLSConfig struct {
 type Config struct {
 	MCPServers map[string]*ServerConfig `json:"mcpServers,omitempty"` // Claude/Cursor format
 	Servers    map[string]*ServerConfig `json:"servers,omitempty"`    // VS Code format
+
+	// merged caches the result of merging MCPServers and Servers.
+	// Populated on first call to MergedServers.
+	merged map[string]*ServerConfig
 }
 
 // LoadConfig loads and parses an MCP configuration file from the given path.
@@ -108,9 +112,13 @@ func ParseConfig(data []byte) (*Config, error) {
 // MergedServers returns a unified map of all servers from both mcpServers and servers keys.
 // If both keys are present, mcpServers takes precedence for duplicate names.
 //
-// A new map is returned on each call. The map values are shared pointers to the
-// underlying ServerConfig objects, so callers should not modify them.
+// The merged result is computed once and cached. Callers must not modify the
+// returned map or its values.
 func (c *Config) MergedServers() map[string]*ServerConfig {
+	if c.merged != nil {
+		return c.merged
+	}
+
 	result := make(map[string]*ServerConfig)
 
 	// First add VS Code format servers
@@ -123,6 +131,7 @@ func (c *Config) MergedServers() map[string]*ServerConfig {
 		result[name] = srv
 	}
 
+	c.merged = result
 	return result
 }
 

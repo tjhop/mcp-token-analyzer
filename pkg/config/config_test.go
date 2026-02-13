@@ -492,7 +492,7 @@ func TestMergeServerEnv_PathTraversal(t *testing.T) {
 	})
 }
 
-func TestMergedServers_ReturnsFreshMap(t *testing.T) {
+func TestMergedServers_CachedResult(t *testing.T) {
 	srv1 := &ServerConfig{Name: "server1", Command: "cmd1"}
 	srv2 := &ServerConfig{Name: "server2", Command: "cmd2"}
 	cfg := &Config{
@@ -513,10 +513,12 @@ func TestMergedServers_ReturnsFreshMap(t *testing.T) {
 		t.Error("expected server2 to be the same pointer as the original")
 	}
 
-	// Mutating a returned map must not affect subsequent calls.
-	servers1["_injected"] = &ServerConfig{Name: "_injected"}
+	// Subsequent calls should return the same cached map.
 	servers2 := cfg.MergedServers()
-	if _, ok := servers2["_injected"]; ok {
-		t.Error("mutating a returned map should not affect subsequent MergedServers calls")
+	if len(servers2) != len(servers1) {
+		t.Errorf("expected cached result with %d servers, got %d", len(servers1), len(servers2))
+	}
+	if servers2["server1"] != srv1 || servers2["server2"] != srv2 {
+		t.Error("cached result should contain the same pointers")
 	}
 }
