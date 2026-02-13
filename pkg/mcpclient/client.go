@@ -97,7 +97,7 @@ func (h *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 
 // NewHTTPClient creates an MCP client that connects via HTTP to the given URL.
 // Pass nil for opts if no options are needed.
-func NewHTTPClient(ctx context.Context, url string, opts *ClientOptions) (*Client, error) {
+func NewHTTPClient(ctx context.Context, endpoint string, opts *ClientOptions) (*Client, error) {
 	var headers map[string]string
 	if opts != nil {
 		headers = opts.Headers
@@ -112,14 +112,14 @@ func NewHTTPClient(ctx context.Context, url string, opts *ClientOptions) (*Clien
 	}
 
 	transport := &mcp.StreamableClientTransport{
-		Endpoint:   url,
+		Endpoint:   endpoint,
 		HTTPClient: httpClient,
 	}
 
 	mcpClient := newMCPClient()
 	session, err := mcpClient.Connect(ctx, transport, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to MCP server at %s: %w", url, err)
+		return nil, fmt.Errorf("failed to connect to MCP server at %s: %w", endpoint, err)
 	}
 
 	client := &Client{ClientSession: session}
