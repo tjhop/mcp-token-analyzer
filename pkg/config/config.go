@@ -105,12 +105,12 @@ func ParseConfig(data []byte) (*Config, error) {
 	return &cfg, nil
 }
 
-// GetServers returns a unified map of all servers from both mcpServers and servers keys.
+// MergedServers returns a unified map of all servers from both mcpServers and servers keys.
 // If both keys are present, mcpServers takes precedence for duplicate names.
 //
 // A new map is returned on each call. The map values are shared pointers to the
 // underlying ServerConfig objects, so callers should not modify them.
-func (c *Config) GetServers() map[string]*ServerConfig {
+func (c *Config) MergedServers() map[string]*ServerConfig {
 	result := make(map[string]*ServerConfig)
 
 	// First add VS Code format servers
@@ -133,7 +133,7 @@ func (c *Config) GetServers() map[string]*ServerConfig {
 // Callers should invoke InferDefaults before Validate to ensure transport
 // types are resolved prior to validation.
 func (c *Config) InferDefaults() {
-	for _, srv := range c.GetServers() {
+	for _, srv := range c.MergedServers() {
 		if srv == nil {
 			continue
 		}
@@ -158,7 +158,7 @@ func (c *Config) InferDefaults() {
 // been called first so that transport types are already resolved; it does not
 // perform any inference itself.
 func (c *Config) Validate() error {
-	servers := c.GetServers()
+	servers := c.MergedServers()
 
 	if len(servers) == 0 {
 		return errors.New("no servers defined in configuration")
@@ -221,7 +221,7 @@ func validateURL(rawURL string) error {
 func (c *Config) Warnings() []string {
 	var warnings []string
 
-	servers := c.GetServers()
+	servers := c.MergedServers()
 	for name, srv := range servers {
 		if srv == nil {
 			continue

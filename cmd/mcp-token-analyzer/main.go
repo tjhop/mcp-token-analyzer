@@ -174,7 +174,7 @@ func buildConfigFromFlags() (*config.Config, error) {
 // runAnalysis performs server analysis on the given config.
 // This is the unified analysis path for both ad-hoc and file-based configs.
 func runAnalysis(ctx context.Context, cfg *config.Config, configDir string, counter *analyzer.TokenCounter) error {
-	servers := cfg.GetServers()
+	servers := cfg.MergedServers()
 
 	// Filter to single server if specified
 	if *flagServer != "" {

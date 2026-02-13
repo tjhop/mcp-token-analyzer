@@ -149,7 +149,7 @@ func TestParseConfig_Cursor(t *testing.T) {
 	}
 }
 
-func TestGetServers_Merging(t *testing.T) {
+func TestMergedServers_Merging(t *testing.T) {
 	// Test that mcpServers takes precedence over servers for duplicate names
 	cfg := &Config{
 		MCPServers: map[string]*ServerConfig{
@@ -161,7 +161,7 @@ func TestGetServers_Merging(t *testing.T) {
 		},
 	}
 
-	servers := cfg.GetServers()
+	servers := cfg.MergedServers()
 	if len(servers) != 2 {
 		t.Errorf("expected 2 servers, got %d", len(servers))
 	}
@@ -492,7 +492,7 @@ func TestMergeServerEnv_PathTraversal(t *testing.T) {
 	})
 }
 
-func TestGetServers_ReturnsFreshMap(t *testing.T) {
+func TestMergedServers_ReturnsFreshMap(t *testing.T) {
 	srv1 := &ServerConfig{Name: "server1", Command: "cmd1"}
 	srv2 := &ServerConfig{Name: "server2", Command: "cmd2"}
 	cfg := &Config{
@@ -500,7 +500,7 @@ func TestGetServers_ReturnsFreshMap(t *testing.T) {
 		Servers:    map[string]*ServerConfig{"server2": srv2},
 	}
 
-	servers1 := cfg.GetServers()
+	servers1 := cfg.MergedServers()
 	if len(servers1) != 2 {
 		t.Errorf("expected 2 servers, got %d", len(servers1))
 	}
@@ -515,8 +515,8 @@ func TestGetServers_ReturnsFreshMap(t *testing.T) {
 
 	// Mutating a returned map must not affect subsequent calls.
 	servers1["_injected"] = &ServerConfig{Name: "_injected"}
-	servers2 := cfg.GetServers()
+	servers2 := cfg.MergedServers()
 	if _, ok := servers2["_injected"]; ok {
-		t.Error("mutating a returned map should not affect subsequent GetServers calls")
+		t.Error("mutating a returned map should not affect subsequent MergedServers calls")
 	}
 }
