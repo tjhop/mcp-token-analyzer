@@ -226,19 +226,167 @@ func TestCountTokens_EdgeCases(t *testing.T) {
 			}
 
 			// CountTokens doesn't return an error, just verify it doesn't panic
-			// and returns a non-negative value
+			// and returns a sensible value.
 			tokens := counter.CountTokens(tt.input)
-			if tokens < 0 {
-				t.Errorf("CountTokens() returned negative value: %d", tokens)
-			}
 
-			// For non-empty inputs, we generally expect at least one token
-			// (though some edge cases like control characters might tokenize differently)
-			// Empty string should return 0 tokens
-			if tt.input == "" && tokens != 0 {
-				t.Errorf("CountTokens() for empty string = %d, want 0", tokens)
+			if tt.input == "" {
+				if tokens != 0 {
+					t.Errorf("CountTokens() for empty string = %d, want 0", tokens)
+				}
+			} else {
+				// All non-empty inputs should produce at least one token.
+				if tokens <= 0 {
+					t.Errorf("CountTokens() for non-empty input %q = %d, want > 0", tt.input, tokens)
+				}
 			}
 		})
+	}
+}
+
+func TestCountTokens_KnownValues(t *testing.T) {
+	// Pin exact token counts for representative inputs using the gpt-4
+	// model (cl100k_base encoding). These serve as regression anchors --
+	// if the underlying tokenizer changes behavior, these tests will catch it.
+	counter, err := NewTokenCounter("gpt-4")
+	if err != nil {
+		t.Fatalf("failed to create counter: %v", err)
+	}
+
+	tests := []struct {
+		name  string
+		input string
+		want  int
+	}{
+		{"empty", "", 0},
+		{"single_word", "Hello", 1},
+		{"two_words", "Hello world", 2},
+		{"short_sentence", "The quick brown fox", 4},
+		{"json_object", `{"key":"value"}`, 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := counter.CountTokens(tt.input)
+			if got != tt.want {
+				t.Errorf("CountTokens(%q) = %d, want %d", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestToolTokens_Add(t *testing.T) {
+	a := ToolTokens{
+		Name:               "a",
+		NameTokens:         1,
+		DescTokens:         2,
+		SchemaTokens:       3,
+		OutputSchemaTokens: 4,
+		AnnotationsTokens:  5,
+		TotalTokens:        15,
+	}
+	b := ToolTokens{
+		Name:               "b",
+		NameTokens:         10,
+		DescTokens:         20,
+		SchemaTokens:       30,
+		OutputSchemaTokens: 40,
+		AnnotationsTokens:  50,
+		TotalTokens:        150,
+	}
+
+	a.Add(b)
+
+	if a.NameTokens != 11 {
+		t.Errorf("NameTokens = %d, want 11", a.NameTokens)
+	}
+	if a.DescTokens != 22 {
+		t.Errorf("DescTokens = %d, want 22", a.DescTokens)
+	}
+	if a.SchemaTokens != 33 {
+		t.Errorf("SchemaTokens = %d, want 33", a.SchemaTokens)
+	}
+	if a.OutputSchemaTokens != 44 {
+		t.Errorf("OutputSchemaTokens = %d, want 44", a.OutputSchemaTokens)
+	}
+	if a.AnnotationsTokens != 55 {
+		t.Errorf("AnnotationsTokens = %d, want 55", a.AnnotationsTokens)
+	}
+	if a.TotalTokens != 165 {
+		t.Errorf("TotalTokens = %d, want 165", a.TotalTokens)
+	}
+	// Add should not modify the Name field.
+	if a.Name != "a" {
+		t.Errorf("Name = %q, want %q (should be unchanged)", a.Name, "a")
+	}
+}
+
+func TestPromptTokens_Add(t *testing.T) {
+	a := PromptTokens{
+		Name:        "a",
+		NameTokens:  1,
+		DescTokens:  2,
+		ArgsTokens:  3,
+		TotalTokens: 6,
+	}
+	b := PromptTokens{
+		Name:        "b",
+		NameTokens:  10,
+		DescTokens:  20,
+		ArgsTokens:  30,
+		TotalTokens: 60,
+	}
+
+	a.Add(b)
+
+	if a.NameTokens != 11 {
+		t.Errorf("NameTokens = %d, want 11", a.NameTokens)
+	}
+	if a.DescTokens != 22 {
+		t.Errorf("DescTokens = %d, want 22", a.DescTokens)
+	}
+	if a.ArgsTokens != 33 {
+		t.Errorf("ArgsTokens = %d, want 33", a.ArgsTokens)
+	}
+	if a.TotalTokens != 66 {
+		t.Errorf("TotalTokens = %d, want 66", a.TotalTokens)
+	}
+	if a.Name != "a" {
+		t.Errorf("Name = %q, want %q (should be unchanged)", a.Name, "a")
+	}
+}
+
+func TestResourceTokens_Add(t *testing.T) {
+	a := ResourceTokens{
+		Name:        "a",
+		NameTokens:  1,
+		URITokens:   2,
+		DescTokens:  3,
+		TotalTokens: 6,
+	}
+	b := ResourceTokens{
+		Name:        "b",
+		NameTokens:  10,
+		URITokens:   20,
+		DescTokens:  30,
+		TotalTokens: 60,
+	}
+
+	a.Add(b)
+
+	if a.NameTokens != 11 {
+		t.Errorf("NameTokens = %d, want 11", a.NameTokens)
+	}
+	if a.URITokens != 22 {
+		t.Errorf("URITokens = %d, want 22", a.URITokens)
+	}
+	if a.DescTokens != 33 {
+		t.Errorf("DescTokens = %d, want 33", a.DescTokens)
+	}
+	if a.TotalTokens != 66 {
+		t.Errorf("TotalTokens = %d, want 66", a.TotalTokens)
+	}
+	if a.Name != "a" {
+		t.Errorf("Name = %q, want %q (should be unchanged)", a.Name, "a")
 	}
 }
 

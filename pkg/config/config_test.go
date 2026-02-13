@@ -142,10 +142,26 @@ func TestParseConfig_Cursor(t *testing.T) {
 		t.Errorf("validation failed: %v", err)
 	}
 
-	// Should have warnings for unsupported options
+	// Should have warnings for unsupported options: one for OAuth, one for TLS.
 	warnings := cfg.Warnings()
 	if len(warnings) != 2 {
-		t.Errorf("expected 2 warnings, got %d: %v", len(warnings), warnings)
+		t.Fatalf("expected 2 warnings, got %d: %v", len(warnings), warnings)
+	}
+
+	var foundOAuth, foundTLS bool
+	for _, w := range warnings {
+		if strings.Contains(w, "OAuth") {
+			foundOAuth = true
+		}
+		if strings.Contains(w, "TLS") {
+			foundTLS = true
+		}
+	}
+	if !foundOAuth {
+		t.Errorf("expected a warning mentioning 'OAuth', got: %v", warnings)
+	}
+	if !foundTLS {
+		t.Errorf("expected a warning mentioning 'TLS', got: %v", warnings)
 	}
 }
 
@@ -339,7 +355,10 @@ func TestValidate_InvalidURL(t *testing.T) {
 		{"invalid_scheme_ftp", "ftp://files.example.com/mcp", true},
 		{"invalid_scheme_ws", "ws://localhost:3000/mcp", true},
 		{"missing_host", "http:///mcp", true},
-		{"empty_url", "", true}, // caught by earlier validation
+		// Note: empty_url tests the "missing URL" check (srv.URL == "") in Validate,
+		// NOT the validateURL format check. It is included here for completeness since
+		// it exercises the same http-transport validation branch.
+		{"empty_url", "", true},
 	}
 
 	for _, tt := range tests {
@@ -490,6 +509,79 @@ func TestMergeServerEnv_PathTraversal(t *testing.T) {
 			t.Errorf("expected ABS_KEY=abs-value, got %q", env["ABS_KEY"])
 		}
 	})
+}
+
+func TestInferDefaults_ServersOnly(t *testing.T) {
+	// Verify that InferDefaults correctly infers transport types for servers
+	// that only appear in the Servers map (VS Code format), ensuring it
+	// processes both map sources via MergedServers.
+	cfg := &Config{
+		Servers: map[string]*ServerConfig{
+			"stdio-server": {
+				Name:    "stdio-server",
+				Command: "my-mcp-server",
+				Args:    []string{"--verbose"},
+			},
+			"http-server": {
+				Name: "http-server",
+				URL:  "http://localhost:3000/mcp",
+			},
+		},
+	}
+
+	cfg.InferDefaults()
+
+	stdio := cfg.Servers["stdio-server"]
+	if stdio.Type != TransportStdio {
+		t.Errorf("expected stdio-server type %q, got %q", TransportStdio, stdio.Type)
+	}
+
+	http := cfg.Servers["http-server"]
+	if http.Type != TransportHTTP {
+		t.Errorf("expected http-server type %q, got %q", TransportHTTP, http.Type)
+	}
+
+	// Validate should also pass after InferDefaults.
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("validation failed after InferDefaults: %v", err)
+	}
+}
+
+func TestLoadEnvFile_MalformedLines(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		wantSub string // expected substring in error message
+	}{
+		{
+			name:    "missing_equals",
+			content: "NO_EQUALS_HERE",
+			wantSub: "missing '='",
+		},
+		{
+			name:    "empty_key",
+			content: "=value",
+			wantSub: "empty key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			envPath := filepath.Join(tmpDir, ".env")
+			if err := os.WriteFile(envPath, []byte(tt.content), 0644); err != nil {
+				t.Fatalf("failed to write temp env file: %v", err)
+			}
+
+			_, err := LoadEnvFile(envPath)
+			if err == nil {
+				t.Fatalf("expected error for content %q, got nil", tt.content)
+			}
+			if !strings.Contains(err.Error(), tt.wantSub) {
+				t.Errorf("expected error containing %q, got: %v", tt.wantSub, err)
+			}
+		})
+	}
 }
 
 func TestMergedServers_CachedResult(t *testing.T) {
