@@ -73,8 +73,9 @@ Resource Analysis (sorted by total tokens)
   - Prompts: Token breakdown for names, descriptions, and arguments
   - Resources & Templates: Token breakdown for names, URIs, and descriptions
 - Token Counting
-  - Uses `tiktoken` (defaults to `cl100k_base` / GPT-4)
+  - Uses `tiktoken` via [tiktoken-go](https://github.com/pkoukk/tiktoken-go) (defaults to `cl100k_base` / GPT-4)
   - Configurable tokenizer model via `--tokenizer.model`
+  - See [Supported Tokenizer Models](#supported-tokenizer-models) for available models and encodings
 - Reporting
   - Summary table showing token usage per server
   - Detail tables showing per-component token breakdowns (always shown for single-server, opt-in via `--detail` for multi-server)
@@ -207,6 +208,26 @@ The transport type (`stdio` or `http`) is automatically inferred from the presen
 When analyzing multiple servers, the tool displays a summary table showing token usage across all servers. Use `--detail` to additionally display per-component detail tables (tools, prompts, resources) with entries from all servers sorted by total tokens. Each row includes the server name so components can be traced back to their origin.
 
 When analyzing a single server (either ad-hoc via CLI flags or via `--server`), detail tables are always shown automatically.
+
+## Supported Tokenizer Models
+
+The `--tokenizer.model` flag accepts any model name recognized by [tiktoken-go](https://github.com/pkoukk/tiktoken-go). The model name determines which encoding (tokenization scheme) is used for counting. The default is `gpt-4` (`cl100k_base`).
+
+### Encodings and Models
+
+| Encoding | Models |
+|----------|--------|
+| `o200k_base` | `gpt-4.5`, `gpt-4.1`, `gpt-4o` (and dated variants like `gpt-4o-2024-05-13`) |
+| `cl100k_base` | `gpt-4`, `gpt-3.5-turbo` (and dated variants), `text-embedding-ada-002`, `text-embedding-3-small`, `text-embedding-3-large` |
+| `p50k_base` | `text-davinci-003`, `text-davinci-002`, `code-davinci-002`, `code-cushman-002` |
+| `r50k_base` | `text-davinci-001`, `text-curie-001`, `text-babbage-001`, `text-ada-001`, `davinci`, `curie`, `babbage`, `ada` |
+
+You can also pass an encoding name directly (e.g., `--tokenizer.model o200k_base`) if you prefer to specify the encoding rather than a model name.
+
+### Limitations
+
+- **Anthropic Claude models are not supported** by tiktoken-go. There is no official tokenizer for Claude models. When analyzing MCP servers used with Claude, the token counts are approximate. Using `o200k_base` or `cl100k_base` provides a reasonable estimate but will not match Claude's actual tokenization.
+- tiktoken-go's model list reflects OpenAI's public models. Newer or experimental models may not be recognized until the library is updated.
 
 ## Command Line Flags
 
