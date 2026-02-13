@@ -250,10 +250,19 @@ func analyzeClient(ctx context.Context, client *mcpclient.Client, counter *analy
 	// Instructions
 	result.InstructionTokens = counter.CountTokens(initResp.Instructions)
 
-	// Analyze each component - all are optional since not all servers support all capabilities
-	result.ToolStats, result.TotalToolTokens = analyzeTools(ctx, client, counter)
-	result.PromptStats, result.TotalPromptTokens = analyzePrompts(ctx, client, counter)
-	result.ResourceStats, result.TotalResourceTokens = analyzeResources(ctx, client, counter)
+	// Only analyze components the server advertises support for. This
+	// avoids noisy "Method not found" warnings from servers that don't
+	// implement all capability types.
+	caps := initResp.Capabilities
+	if caps != nil && caps.Tools != nil {
+		result.ToolStats, result.TotalToolTokens = analyzeTools(ctx, client, counter)
+	}
+	if caps != nil && caps.Prompts != nil {
+		result.PromptStats, result.TotalPromptTokens = analyzePrompts(ctx, client, counter)
+	}
+	if caps != nil && caps.Resources != nil {
+		result.ResourceStats, result.TotalResourceTokens = analyzeResources(ctx, client, counter)
+	}
 
 	return result
 }
@@ -261,7 +270,7 @@ func analyzeClient(ctx context.Context, client *mcpclient.Client, counter *analy
 // analyzeTools lists and analyzes all tools from the server.
 // Returns the per-tool stats and the accumulated totals.
 // Uses the SDK's paginating iterator to ensure all tools are retrieved.
-// Not all servers support tools, so listing errors are logged as warnings.
+// Callers should check server capabilities before calling this function.
 //
 // Note: some variations of mcp.json format have the concept of allowed/denied
 // tools. If/when that is standardized, this project may support it. For now,
@@ -289,18 +298,13 @@ func analyzeTools(ctx context.Context, client *mcpclient.Client, counter *analyz
 
 // analyzePrompts lists and analyzes all prompts from the server.
 // Uses the SDK's paginating iterator to ensure all prompts are retrieved.
-// Not all servers support prompts, so listing errors are logged as warnings.
+// Callers should check server capabilities before calling this function.
 func analyzePrompts(ctx context.Context, client *mcpclient.Client, counter *analyzer.TokenCounter) ([]analyzer.PromptTokens, analyzer.PromptTokens) {
 	total := analyzer.PromptTokens{Name: tableLabelTotal}
 
 	var stats []analyzer.PromptTokens
 	for prompt, err := range client.Prompts(ctx, nil) {
 		if err != nil {
-			// Known issue: servers that don't implement prompts/resources
-			// produce noisy "Method not found" warnings here. Ideally
-			// these would be debug-level log messages, but that requires
-			// migrating to a structured logger (e.g., log/slog). For now,
-			// they remain as stderr warnings.
 			fmt.Fprintf(os.Stderr, "Warning: failed to list prompts for %s: %v\n", client.Name, err)
 			break
 		}
@@ -318,7 +322,7 @@ func analyzePrompts(ctx context.Context, client *mcpclient.Client, counter *anal
 
 // analyzeResources lists and analyzes all resources and resource templates from the server.
 // Uses the SDK's paginating iterators to ensure all items are retrieved.
-// Not all servers support resources, so listing errors are logged as warnings.
+// Callers should check server capabilities before calling this function.
 func analyzeResources(ctx context.Context, client *mcpclient.Client, counter *analyzer.TokenCounter) ([]analyzer.ResourceTokens, analyzer.ResourceTokens) {
 	total := analyzer.ResourceTokens{Name: tableLabelTotal}
 
