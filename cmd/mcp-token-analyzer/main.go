@@ -42,7 +42,7 @@ var (
 	flagConfigFile   = kingpin.Flag("config", "Path to mcp.json config file").Short('f').String()
 	flagServer       = kingpin.Flag("server", "Analyze only this named server from config").Short('s').String()
 	flagDetail       = kingpin.Flag("detail", "Show detailed per-server tables").Bool()
-	flagContextLimit = kingpin.Flag("limit", "Context window limit for percentage calculation").Int()
+	flagContextLimit = kingpin.Flag("limit", "Optional context window limit for percentage calculation").Int()
 )
 
 // ServerResult holds the analysis results for a single MCP server.
@@ -76,7 +76,7 @@ func resolveServerName(configuredName string, serverInfo *mcp.Implementation) st
 	switch {
 	case configuredName != "":
 		return configuredName
-	case serverInfo != nil:
+	case serverInfo != nil && serverInfo.Name != "":
 		return serverInfo.Name
 	default:
 		return unknownServerName
@@ -148,7 +148,7 @@ func buildConfigFromFlags() (*config.Config, error) {
 	switch *flagMCPTransport {
 	case "stdio":
 		if *flagMCPCommand == "" {
-			return nil, errors.New("--mcp.command is required for stdio transport")
+			return nil, errors.New("--mcp.command is required for stdio transport in single-server mode")
 		}
 		// Parse command string into command + args
 		parts := strings.Fields(*flagMCPCommand)
@@ -158,7 +158,7 @@ func buildConfigFromFlags() (*config.Config, error) {
 		}
 	case "http", "streamable-http":
 		if *flagMCPURL == "" {
-			return nil, errors.New("--mcp.url is required for http transport")
+			return nil, errors.New("--mcp.url is required for http transport in single-server mode")
 		}
 		srv.URL = *flagMCPURL
 	}
@@ -189,30 +189,16 @@ func runAnalysis(ctx context.Context, cfg *config.Config, configDir string, coun
 		return errors.New("no servers to analyze")
 	}
 
-	// If single server (either filtered or only one in config), use single-server output
-	if len(servers) == 1 {
-		for name, srv := range servers {
-			result := analyzeServer(ctx, name, srv, configDir, counter)
-			if result.Error != nil {
-				return fmt.Errorf("server %q: %w", name, result.Error)
-			}
-			renderSingleServerOutput(result)
-			return nil
-		}
-	}
-
-	// Multi-server mode: analyze all servers in parallel
 	results := connectAndAnalyzeAll(ctx, servers, configDir, counter)
 
-	// Render group summary
-	renderGroupSummary(results)
-
-	// Render detailed tables if requested
-	if *flagDetail {
-		renderDetailedTables(results)
+	// Single-server results always include detail tables; multi-server
+	// results include them only when explicitly requested via --detail.
+	if len(results) == 1 || *flagDetail {
+		renderDetailTables(results)
 	}
 
-	// Report failure if any servers had errors, so the CLI exits with non-zero status.
+	renderSummary(results)
+
 	var failCount int
 	for _, r := range results {
 		if r.Error != nil {
@@ -230,12 +216,19 @@ func runAnalysis(ctx context.Context, cfg *config.Config, configDir string, coun
 func analyzeServer(ctx context.Context, name string, srv *config.ServerConfig, configDir string, counter *analyzer.TokenCounter) *ServerResult {
 	client, err := mcpclient.NewClientFromConfig(ctx, srv, configDir)
 	if err != nil {
-		return &ServerResult{Name: name, Error: err}
+		return &ServerResult{Name: resolveServerName(name, nil), Error: err}
 	}
 	defer client.Close()
 
 	result := analyzeClient(ctx, client, counter)
-	result.Name = name
+
+	// The configured name (map key) takes precedence over the
+	// server-reported name from the init result. When running ad-hoc
+	// (empty map key), preserve the name that analyzeClient resolved
+	// from the server's initialization response.
+	if name != "" {
+		result.Name = name
+	}
 	return result
 }
 
@@ -244,8 +237,6 @@ func analyzeClient(ctx context.Context, client *mcpclient.Client, counter *analy
 	result := &ServerResult{}
 
 	// Get server name and instructions from the initialize response.
-	// The SDK should always return a non-nil result after successful connection,
-	// but we check defensively to avoid panics.
 	initResp := client.InitializeResult()
 	if initResp == nil {
 		result.Name = resolveServerName(client.Name, nil)
@@ -270,6 +261,10 @@ func analyzeClient(ctx context.Context, client *mcpclient.Client, counter *analy
 // Returns the per-tool stats and the accumulated totals.
 // Uses the SDK's paginating iterator to ensure all tools are retrieved.
 // Not all servers support tools, so listing errors are logged as warnings.
+//
+// Note: some variations of mcp.json format have the concept of allowed/denied
+// tools. If/when that is standardized, this project may support it. For now,
+// we always attempt to load and analyze all tools.
 func analyzeTools(ctx context.Context, client *mcpclient.Client, counter *analyzer.TokenCounter) ([]analyzer.ToolTokens, analyzer.ToolTokens) {
 	total := analyzer.ToolTokens{Name: tableLabelTotal}
 
@@ -300,6 +295,11 @@ func analyzePrompts(ctx context.Context, client *mcpclient.Client, counter *anal
 	var stats []analyzer.PromptTokens
 	for prompt, err := range client.Prompts(ctx, nil) {
 		if err != nil {
+			// Known issue: servers that don't implement prompts/resources
+			// produce noisy "Method not found" warnings here. Ideally
+			// these would be debug-level log messages, but that requires
+			// migrating to a structured logger (e.g., log/slog). For now,
+			// they remain as stderr warnings.
 			fmt.Fprintf(os.Stderr, "Warning: failed to list prompts for %s: %v\n", client.Name, err)
 			break
 		}
@@ -362,6 +362,8 @@ func connectAndAnalyzeAll(ctx context.Context, servers map[string]*config.Server
 		mu      sync.Mutex
 	)
 
+	// Using errgroup.Group over sync.WaitGroup for built in concurrency
+	// limiter.
 	var g errgroup.Group
 	g.SetLimit(maxConcurrentConnections)
 

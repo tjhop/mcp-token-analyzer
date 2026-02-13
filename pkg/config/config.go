@@ -27,6 +27,9 @@ const (
 
 // ServerConfig holds configuration for a single MCP server.
 type ServerConfig struct {
+	// Name duplicates the map key so that functions receiving a *ServerConfig
+	// (e.g., MergeServerEnv, NewClientFromConfig) can identify the server
+	// without requiring the caller to pass the key separately.
 	Name    string            `json:"-"`              // From map key, populated during parsing
 	Type    Transport         `json:"type,omitempty"` // Inferred from fields if empty
 	Command string            `json:"command,omitempty"`
@@ -259,14 +262,13 @@ func LoadEnvFile(path string) (map[string]string, error) {
 			continue
 		}
 
-		// Find the first = sign
-		idx := strings.Index(line, "=")
-		if idx == -1 {
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
 			return nil, fmt.Errorf("line %d: invalid format (missing '=')", lineNum)
 		}
 
-		key := strings.TrimSpace(line[:idx])
-		value := strings.TrimSpace(line[idx+1:])
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
 
 		// Strip surrounding quotes if present
 		if len(value) >= 2 {
@@ -290,10 +292,11 @@ func LoadEnvFile(path string) (map[string]string, error) {
 	return result, nil
 }
 
-// ResolveServerEnv resolves the environment variables for a server configuration.
-// It merges the env map with any envFile contents (envFile values are loaded first,
-// then env map values override). The configDir is used to resolve relative envFile paths.
-func ResolveServerEnv(srv *ServerConfig, configDir string) (map[string]string, error) {
+// MergeServerEnv builds the final environment variable map for a server by
+// merging envFile contents with the inline env map. Values from envFile are
+// loaded first, then env map values override. The configDir is used to resolve
+// relative envFile paths.
+func MergeServerEnv(srv *ServerConfig, configDir string) (map[string]string, error) {
 	result := make(map[string]string)
 
 	// First, load envFile if specified
@@ -301,6 +304,16 @@ func ResolveServerEnv(srv *ServerConfig, configDir string) (map[string]string, e
 		envPath := srv.EnvFile
 		if !filepath.IsAbs(envPath) {
 			envPath = filepath.Join(configDir, envPath)
+		}
+		envPath = filepath.Clean(envPath)
+
+		// Guard against path traversal: when a configDir is set,
+		// the resolved envFile path must remain within it.
+		if configDir != "" && !filepath.IsAbs(srv.EnvFile) {
+			cleanedConfigDir := filepath.Clean(configDir)
+			if !strings.HasPrefix(envPath, cleanedConfigDir+string(filepath.Separator)) && envPath != cleanedConfigDir {
+				return nil, fmt.Errorf("envFile %q resolves to %q, which is outside the config directory %q", srv.EnvFile, envPath, cleanedConfigDir)
+			}
 		}
 
 		envVars, err := LoadEnvFile(envPath)

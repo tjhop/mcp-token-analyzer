@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -251,7 +252,7 @@ func TestLoadEnvFile_NotFound(t *testing.T) {
 	}
 }
 
-func TestResolveServerEnv(t *testing.T) {
+func TestMergeServerEnv(t *testing.T) {
 	// Create a temporary .env file
 	tmpDir := t.TempDir()
 	envPath := filepath.Join(tmpDir, ".env")
@@ -267,7 +268,7 @@ func TestResolveServerEnv(t *testing.T) {
 		},
 	}
 
-	env, err := ResolveServerEnv(srv, tmpDir)
+	env, err := MergeServerEnv(srv, tmpDir)
 	if err != nil {
 		t.Fatalf("failed to resolve env: %v", err)
 	}
@@ -283,14 +284,14 @@ func TestResolveServerEnv(t *testing.T) {
 	}
 }
 
-func TestResolveServerEnv_NoEnvFile(t *testing.T) {
+func TestMergeServerEnv_NoEnvFile(t *testing.T) {
 	srv := &ServerConfig{
 		Env: map[string]string{
 			"KEY": "value",
 		},
 	}
 
-	env, err := ResolveServerEnv(srv, "")
+	env, err := MergeServerEnv(srv, "")
 	if err != nil {
 		t.Fatalf("failed to resolve env: %v", err)
 	}
@@ -418,6 +419,77 @@ func TestInferDefaults_StreamableHTTPNormalization(t *testing.T) {
 		t.Errorf("expected inferred type %q, got %q",
 			TransportHTTP, cfg.MCPServers["inferred-http"].Type)
 	}
+}
+
+func TestMergeServerEnv_PathTraversal(t *testing.T) {
+	t.Run("relative_path_escapes_config_dir", func(t *testing.T) {
+		// A relative envFile that uses ../ to escape the config directory
+		// should be rejected before we ever attempt to open the file.
+		configDir := t.TempDir()
+
+		srv := &ServerConfig{
+			EnvFile: "../../etc/shadow",
+		}
+
+		_, err := MergeServerEnv(srv, configDir)
+		if err == nil {
+			t.Fatal("expected error for envFile that escapes config directory via ../")
+		}
+		if !strings.Contains(err.Error(), "outside the config directory") {
+			t.Errorf("expected 'outside the config directory' in error, got: %v", err)
+		}
+	})
+
+	t.Run("relative_path_within_config_dir", func(t *testing.T) {
+		// A relative envFile that stays within the config directory
+		// should resolve and load successfully.
+		configDir := t.TempDir()
+
+		subDir := filepath.Join(configDir, "subdir")
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			t.Fatalf("failed to create subdir: %v", err)
+		}
+		envPath := filepath.Join(subDir, "app.env")
+		if err := os.WriteFile(envPath, []byte("NESTED_KEY=nested-value"), 0644); err != nil {
+			t.Fatalf("failed to write env file: %v", err)
+		}
+
+		srv := &ServerConfig{
+			EnvFile: filepath.Join("subdir", "app.env"),
+		}
+
+		env, err := MergeServerEnv(srv, configDir)
+		if err != nil {
+			t.Fatalf("expected success for envFile within config directory, got: %v", err)
+		}
+		if env["NESTED_KEY"] != "nested-value" {
+			t.Errorf("expected NESTED_KEY=nested-value, got %q", env["NESTED_KEY"])
+		}
+	})
+
+	t.Run("absolute_path_bypasses_confinement", func(t *testing.T) {
+		// An absolute envFile path is treated as explicit and should
+		// bypass the config directory confinement check entirely.
+		envDir := t.TempDir()
+		configDir := t.TempDir() // deliberately a different directory
+
+		envPath := filepath.Join(envDir, "external.env")
+		if err := os.WriteFile(envPath, []byte("ABS_KEY=abs-value"), 0644); err != nil {
+			t.Fatalf("failed to write env file: %v", err)
+		}
+
+		srv := &ServerConfig{
+			EnvFile: envPath, // absolute path outside configDir
+		}
+
+		env, err := MergeServerEnv(srv, configDir)
+		if err != nil {
+			t.Fatalf("expected success for absolute envFile path, got: %v", err)
+		}
+		if env["ABS_KEY"] != "abs-value" {
+			t.Errorf("expected ABS_KEY=abs-value, got %q", env["ABS_KEY"])
+		}
+	})
 }
 
 func TestGetServers_ReturnsFreshMap(t *testing.T) {

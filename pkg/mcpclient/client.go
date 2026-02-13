@@ -98,8 +98,6 @@ func (h *headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 // NewHTTPClient creates an MCP client that connects via HTTP to the given URL.
 // Pass nil for opts if no options are needed.
 func NewHTTPClient(ctx context.Context, url string, opts *ClientOptions) (*Client, error) {
-	// Always use a custom transport for consistency and future extensibility
-	// (e.g., connection pooling settings, custom TLS configuration).
 	var headers map[string]string
 	if opts != nil {
 		headers = opts.Headers
@@ -140,7 +138,7 @@ func NewClientFromConfig(ctx context.Context, srv *config.ServerConfig, configDi
 	}
 
 	// Resolve environment variables
-	env, err := config.ResolveServerEnv(srv, configDir)
+	env, err := config.MergeServerEnv(srv, configDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve environment: %w", err)
 	}

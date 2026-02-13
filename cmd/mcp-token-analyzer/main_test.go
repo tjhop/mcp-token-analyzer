@@ -116,10 +116,10 @@ func TestResolveServerName(t *testing.T) {
 			want:           unknownServerName,
 		},
 		{
-			name:           "serverinfo_with_empty_name",
+			name:           "serverinfo_with_empty_name_falls_through",
 			configuredName: "",
 			serverInfo:     &mcp.Implementation{Name: "", Version: "1.0.0"},
-			want:           "",
+			want:           unknownServerName,
 		},
 		{
 			name:           "configured_empty_string_uses_serverinfo",
