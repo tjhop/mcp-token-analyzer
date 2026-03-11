@@ -8,7 +8,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.4.0
 	github.com/pkoukk/tiktoken-go v0.1.8
 	golang.org/x/sync v0.20.0
-	golang.org/x/text v0.34.0
+	golang.org/x/text v0.35.0
 )
 
 require (
